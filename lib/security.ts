@@ -34,12 +34,12 @@ export function checkSameOrigin(request:Request) {
   try { return new URL(origin).host === host; } catch { return false; }
 }
 
-export function recentAttempts(email:string) {
+export async function recentAttempts(email:string) {
   const cutoff = new Date(Date.now()-15*60*1000).toISOString().slice(0,19).replace("T"," ");
   const normalized=email.toLowerCase().slice(0,254);
-  const row=database.prepare("SELECT COUNT(*) AS count FROM auth_attempts WHERE email_key=? AND attempted_at>=?").get(normalized,cutoff) as {count:number};
+  const row=await database.prepare("SELECT COUNT(*) AS count FROM auth_attempts WHERE email_key=? AND attempted_at>=?").get(normalized,cutoff) as {count:number};
   return Number(row.count);
 }
-export function recordAttempt(email:string) {
-  database.prepare("INSERT INTO auth_attempts(email_key) VALUES(?)").run(email.toLowerCase().slice(0,254));
+export async function recordAttempt(email:string) {
+  await database.prepare("INSERT INTO auth_attempts(email_key) VALUES(?)").run(email.toLowerCase().slice(0,254));
 }

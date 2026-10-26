@@ -5,7 +5,7 @@ import {isAllowedMediaUrl} from "@/lib/security";
 import {VideoPlayer} from "@/components/VideoPlayer";
 export const runtime="nodejs";export const dynamic="force-dynamic";export const metadata={title:"Watch",robots:{index:false,follow:false}};
 export default async function WatchPage({searchParams}:{searchParams:Promise<{slug?:string;episode?:string}>}){
- const {slug,episode}=await searchParams;if(!slug)notFound();const item=getTitle(slug) as any;if(!item)notFound();
+ const {slug,episode}=await searchParams;if(!slug)notFound();const item=await getTitle(slug) as any;if(!item)notFound();
  const episodes=item.seasons?.flatMap((s:any)=>s.episodes)||[];const current=episode?episodes.find((e:any)=>e.id===episode):episodes[0]||null;
  if(episode&&!current)notFound();
  const source=current?.video_url||item.video_url||"";const playable=source&&isAllowedMediaUrl(source)?source:"";

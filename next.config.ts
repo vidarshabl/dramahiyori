@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  outputFileTracingIncludes: { "/*": ["./db/migrations/*.sql"] },
   experimental: { cpus: 1 },
   async headers() {
     return [{
