@@ -1,0 +1,6 @@
+import {createSession,currentUser} from "@/lib/auth";
+import {badRequest,json,readJson,sameOriginOrReject} from "@/lib/api";
+import {database} from "@/lib/db";
+import {hashPassword,verifyPassword} from "@/lib/security";
+export const runtime="nodejs";
+export async function POST(request:Request){const rejected=sameOriginOrReject(request);if(rejected)return rejected;const user=await currentUser();if(!user)return badRequest("Sign in to change your password.",401);const body=await readJson(request);const password=typeof body?.password==="string"?body.password:"";if(password.length<12||password.length>128)return badRequest("Choose a password between 12 and 128 characters.");if(body?.confirmPassword!==password)return badRequest("Those passwords don’t match.");const row=database.prepare("SELECT password_hash FROM users WHERE id=?").get(user.id) as {password_hash:string};if(typeof body?.currentPassword!=="string"||!verifyPassword(body.currentPassword,row.password_hash))return badRequest("Your current password isn’t correct.",401);database.prepare("UPDATE users SET password_hash=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(hashPassword(password),user.id);database.prepare("DELETE FROM sessions WHERE user_id=?").run(user.id);await createSession(user.id);return json({changed:true});}

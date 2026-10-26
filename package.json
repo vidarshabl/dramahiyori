@@ -1,0 +1,28 @@
+{
+  "name": "deardrama",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "db:seed": "node --experimental-strip-types scripts/seed.ts",
+    "admin:create": "node --experimental-strip-types scripts/create-admin.ts",
+    "test:e2e": "node --test tests/e2e.test.mjs"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.18.0",
+    "hls.js": "^1.7.3",
+    "next": "15.5.9",
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "typescript": "^5.8.3"
+  }
+}

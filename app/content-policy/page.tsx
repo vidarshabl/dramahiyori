@@ -1,0 +1,2 @@
+import {InfoPage} from "@/components/InfoPage";
+export default function PolicyPage(){return <InfoPage eyebrow="RESPONSIBLE STORYTELLING" title="Content policy"><p>Publish only content and media you are authorized to make available. Add accurate metadata, label demonstrations clearly, and avoid presenting unverified ratings, subtitle languages, or availability as fact.</p><h2>Reporting a concern</h2><p>Use the report page to prepare a report. The site operator must configure a contact address or review workflow to receive and process reports.</p></InfoPage>}

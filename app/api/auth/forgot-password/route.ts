@@ -1,0 +1,2 @@
+import {badRequest,json,sameOriginOrReject} from "@/lib/api";
+export async function POST(request:Request){const rejected=sameOriginOrReject(request);if(rejected)return rejected;if(!process.env.EMAIL_PROVIDER_URL||!process.env.EMAIL_API_KEY)return badRequest("Password recovery is unavailable until an email provider is configured. No email was sent.",503);return json({error:"Connect an email adapter and password-reset token workflow before enabling recovery."},501);}

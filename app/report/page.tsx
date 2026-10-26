@@ -1,0 +1,2 @@
+import {InfoPage} from "@/components/InfoPage";
+export default function ReportPage(){return <InfoPage eyebrow="WE TAKE REPORTS SERIOUSLY" title="Report content"><p>This starter does not have a report inbox or a configured contact address yet, so it cannot accept or send a report. Please ask the site administrator to configure a report contact and review process before launch.</p><p>Do not include passwords or payment information in a content report.</p></InfoPage>}
