@@ -30,7 +30,8 @@ export function isAllowedMediaUrl(value:string) {
     const host=url.hostname.toLowerCase();
     const allowed = (process.env.MEDIA_ALLOWED_HOSTS || "").split(",").map(x=>x.trim().toLowerCase()).filter(Boolean);
     const internetArchiveHost=host==="archive.org"||host.endsWith(".archive.org");
-    return internetArchiveHost || allowed.length === 0 || allowed.includes(host);
+    const vercelBlobHost=host.endsWith(".public.blob.vercel-storage.com");
+    return internetArchiveHost || vercelBlobHost || allowed.length === 0 || allowed.includes(host);
   } catch { return false; }
 }
 

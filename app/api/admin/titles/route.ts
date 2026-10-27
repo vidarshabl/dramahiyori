@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 
 export const runtime="nodejs";
 const slugify=(s:string)=>s.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+type GalleryInput={url:string;caption:string;attribution:string};
 function validTitle(body:Record<string,unknown>) {
   const title=typeof body.title==="string"?body.title.trim():"";
   const type=body.type==="movie"||body.type==="series"?body.type:null;
@@ -27,6 +28,17 @@ function validTitle(body:Record<string,unknown>) {
   const languages=Array.isArray(body.subtitleLanguages)?body.subtitleLanguages.filter((x):x is string=>typeof x==="string").map(x=>x.trim().slice(0,50)).filter(Boolean).slice(0,20):[];
   const published=body.published===true;
   const featured=body.featured===true;
+  const rawGallery=Array.isArray(body.gallery)?body.gallery:[];
+  if(rawGallery.length>30)return {error:"A title can have up to 30 gallery images."};
+  const gallery:GalleryInput[]=[];
+  for(const [index,value] of rawGallery.entries()) {
+    const image=value as Record<string,unknown>;
+    const url=typeof image?.url==="string"?image.url.trim():"";
+    const caption=typeof image?.caption==="string"?image.caption.trim().slice(0,200):"";
+    const attribution=typeof image?.attribution==="string"?image.attribution.trim().slice(0,200):"";
+    if(!url||!isAllowedMediaUrl(url))return {error:`Check gallery image ${index+1}; use a valid HTTPS image URL.`};
+    if(!gallery.some(entry=>entry.url===url))gallery.push({url,caption,attribution});
+  }
   let episodes:Record<string,unknown>[]=[];
   if(body.episodes!==undefined) {
     if(!Array.isArray(body.episodes)||body.episodes.length>250)return {error:"Episodes must be a list with no more than 250 entries."};
@@ -40,7 +52,7 @@ function validTitle(body:Record<string,unknown>) {
       if(typeof ep?.thumbnailUrl==="string"&&ep.thumbnailUrl&&!isValidMediaUrl(ep.thumbnailUrl))return {error:`Episode ${i+1} has an invalid thumbnail URL.`};
     }
   }
-  return {title,type,synopsis,releaseYear,poster,backdrop,video,genres,status,country,alternative,rating,runtime,languages,published,featured,episodes};
+  return {title,type,synopsis,releaseYear,poster,backdrop,video,genres,status,country,alternative,rating,runtime,languages,published,featured,episodes,gallery};
 }
 async function audit(db:DatabaseAdapter,adminId:string,action:string,id:string,details:unknown={}) {
   await db.prepare("INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)").run(adminId,action,"title",id,JSON.stringify(details));
@@ -54,7 +66,15 @@ async function writeGenres(db:DatabaseAdapter,titleId:string,genres:string[]) {
     if(genre)await db.prepare("INSERT OR IGNORE INTO title_genres(title_id,genre_id) VALUES(?,?)").run(titleId,genre.id);
   }
 }
+async function writeGallery(db:DatabaseAdapter,titleId:string,gallery:GalleryInput[]) {
+  await db.prepare("DELETE FROM title_gallery WHERE title_id=?").run(titleId);
+  for(const [sortOrder,image] of gallery.entries())await db.prepare("INSERT INTO title_gallery(id,title_id,image_url,caption,attribution,sort_order) VALUES(?,?,?,?,?,?)").run(randomUUID(),titleId,image.url,image.caption,image.attribution,sortOrder);
+}
 async function writeEpisodes(db:DatabaseAdapter,titleId:string,episodes:Record<string,unknown>[]) {
+  await db.prepare("UPDATE watch_progress SET episode_id=NULL WHERE episode_id IN (SELECT e.id FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE s.title_id=?)").run(titleId);
+  await db.prepare("UPDATE viewing_history SET episode_id=NULL WHERE episode_id IN (SELECT e.id FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE s.title_id=?)").run(titleId);
+  await db.prepare("DELETE FROM subtitle_tracks WHERE episode_id IN (SELECT e.id FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE s.title_id=?)").run(titleId);
+  await db.prepare("DELETE FROM episodes WHERE season_id IN (SELECT id FROM seasons WHERE title_id=?)").run(titleId);
   await db.prepare("DELETE FROM seasons WHERE title_id=?").run(titleId);
   if(!episodes.length)return;
   const seasonIds=new Map<number,string>();
@@ -71,11 +91,12 @@ export async function GET() {
   const admin=await currentAdmin(); if(!admin)return badRequest("Administrator access is required.",403);
   const items=await database.prepare("SELECT * FROM titles ORDER BY updated_at DESC LIMIT 200").all() as {id:string;[key:string]:any}[];
   const expanded=await Promise.all(items.map(async t=>{
-    const [genres,episodes]=await Promise.all([
+    const [genres,episodes,gallery]=await Promise.all([
       database.prepare("SELECT g.name FROM genres g JOIN title_genres tg ON tg.genre_id=g.id WHERE tg.title_id=?").all(t.id) as Promise<{name:string}[]>,
-      database.prepare("SELECT e.id,e.title,e.episode_number,e.synopsis,e.thumbnail_url,e.duration_minutes,e.video_url,s.season_number FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE s.title_id=? ORDER BY s.season_number,e.episode_number").all(t.id) as Promise<{id:string;[key:string]:any}[]>
+      database.prepare("SELECT e.id,e.title,e.episode_number,e.synopsis,e.thumbnail_url,e.duration_minutes,e.video_url,s.season_number FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE s.title_id=? ORDER BY s.season_number,e.episode_number").all(t.id) as Promise<{id:string;[key:string]:any}[]>,
+      database.prepare("SELECT id,image_url,caption,attribution,sort_order FROM title_gallery WHERE title_id=? ORDER BY sort_order,id").all(t.id) as Promise<Record<string,any>[]>
     ]);
-    return {...t,genres:genres.map(x=>x.name),episodes:await Promise.all(episodes.map(async e=>({...e,subtitles:await database.prepare("SELECT language,label,file_url AS fileUrl,kind FROM subtitle_tracks WHERE episode_id=?").all(e.id)})))};
+    return {...t,genres:genres.map(x=>x.name),gallery,episodes:await Promise.all(episodes.map(async e=>({...e,subtitles:await database.prepare("SELECT language,label,file_url AS fileUrl,kind FROM subtitle_tracks WHERE episode_id=?").all(e.id)})))};
   }));
   return json({items:expanded});
 }
@@ -91,7 +112,7 @@ export async function POST(request:Request) {
     await database.transaction(async tx=>{
       await tx.prepare(`INSERT INTO titles(id,type,slug,title,alternative_title,synopsis,release_year,country,status,runtime_minutes,poster_url,backdrop_url,content_rating,subtitle_languages,video_url,published,featured,demo,updated_at)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,CURRENT_TIMESTAMP)`).run(id,data.type,slug,data.title,data.alternative,data.synopsis,data.releaseYear,data.country,data.status,data.runtime,data.poster,data.backdrop,data.rating,JSON.stringify(data.languages),data.video,data.published?1:0,data.featured?1:0);
-      await writeGenres(tx,id,data.genres); await writeEpisodes(tx,id,data.type==="series"?data.episodes:[]);
+      await writeGenres(tx,id,data.genres); await writeEpisodes(tx,id,data.type==="series"?data.episodes:[]); await writeGallery(tx,id,data.gallery);
       await audit(tx,admin.id,"content.create",id,{title:data.title});
     });
     return json({id,slug},201);
@@ -108,7 +129,7 @@ export async function PUT(request:Request) {
     const saved=await database.transaction(async tx=>{
       const result=await tx.prepare(`UPDATE titles SET type=?,slug=?,title=?,alternative_title=?,synopsis=?,release_year=?,country=?,status=?,runtime_minutes=?,poster_url=?,backdrop_url=?,content_rating=?,subtitle_languages=?,video_url=?,published=?,featured=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(data.type,slug,data.title,data.alternative,data.synopsis,data.releaseYear,data.country,data.status,data.runtime,data.poster,data.backdrop,data.rating,JSON.stringify(data.languages),data.video,data.published?1:0,data.featured?1:0,titleId);
       if(!Number(result.changes))return false;
-      await writeGenres(tx,titleId,data.genres); await writeEpisodes(tx,titleId,data.type==="series"?data.episodes:[]);
+       await writeGenres(tx,titleId,data.genres); await writeEpisodes(tx,titleId,data.type==="series"?data.episodes:[]); await writeGallery(tx,titleId,data.gallery);
       await audit(tx,admin.id,"content.update",titleId,{title:data.title}); return true;
     });
     return saved?json({saved:true}):badRequest("That title could not be found.",404);
@@ -120,6 +141,6 @@ export async function DELETE(request:Request) {
   const id=new URL(request.url).searchParams.get("id"); if(!id)return badRequest("Choose a title to delete.");
   const title=await database.prepare("SELECT title FROM titles WHERE id=?").get(id) as {title:string}|undefined;
   if(!title)return badRequest("That title could not be found.",404);
-  await database.transaction(async tx=>{await tx.prepare("DELETE FROM titles WHERE id=?").run(id);await audit(tx,admin.id,"content.delete",id,{title:title.title});});
+  await database.transaction(async tx=>{await tx.prepare("DELETE FROM title_cast WHERE title_id=?").run(id);await tx.prepare("DELETE FROM title_gallery WHERE title_id=?").run(id);await tx.prepare("DELETE FROM titles WHERE id=?").run(id);await audit(tx,admin.id,"content.delete",id,{title:title.title});});
   return json({deleted:true});
 }

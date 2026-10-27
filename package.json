@@ -10,13 +10,15 @@
     "typecheck": "tsc --noEmit",
     "db:seed": "node --experimental-strip-types scripts/seed.ts",
     "admin:create": "node --experimental-strip-types scripts/create-admin.ts",
+    "test:migrations": "node --experimental-strip-types --test tests/migrations.test.mjs",
     "test:e2e": "node --test tests/e2e.test.mjs"
   },
   "dependencies": {
-    "@next/env": "15.5.9",
     "@libsql/client": "^0.18.0",
+    "@next/env": "15.5.28",
+    "@vercel/blob": "^2.8.2",
     "hls.js": "^1.7.3",
-    "next": "15.5.9",
+    "next": "15.5.28",
     "react": "19.1.1",
     "react-dom": "19.1.1"
   },
@@ -25,5 +27,10 @@
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "typescript": "^5.8.3"
+  },
+  "overrides": {
+    "postcss": "^8.5.23",
+    "sharp": "^0.35.6",
+    "zod": "^4.6.7"
   }
 }

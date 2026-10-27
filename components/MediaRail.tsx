@@ -28,7 +28,7 @@ export function MediaRail({title,eyebrow,items,href}:{title:string;eyebrow?:stri
   const section=useScrollReveal<HTMLElement>();
   const [canPrevious,setCanPrevious]=useState(false),[canNext,setCanNext]=useState(false);
   useEffect(()=>{const element=rail.current;if(!element)return;const update=()=>{const max=element.scrollWidth-element.clientWidth;setCanPrevious(element.scrollLeft>2);setCanNext(max>2&&element.scrollLeft<max-2);};update();element.addEventListener("scroll",update,{passive:true});window.addEventListener("resize",update);return()=>{element.removeEventListener("scroll",update);window.removeEventListener("resize",update);};},[items.length]);
-  function scrollRail(direction:number){const element=rail.current;if(element)element.scrollBy({left:direction*Math.max(element.clientWidth*.8,240),behavior:"smooth"});}
+  function scrollRail(direction:number){const element=rail.current;if(element)element.scrollBy({left:direction*Math.max(element.clientWidth*.8,240),behavior:window.matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});}
   if(!items.length)return null;
   return (
     <section ref={section} className="rail-section scroll-reveal">

@@ -20,6 +20,7 @@ export function VideoPlayer({src,titleId,episodeId,subtitles=[]}:{src:string;tit
  },[src]);
  useEffect(()=>{
   if(!src)return;
+  pendingResume.current=null;setResumeNote("");
   let cancelled=false;
   fetch("/api/progress").then(r=>r.json()).then(data=>{
    if(cancelled)return;
