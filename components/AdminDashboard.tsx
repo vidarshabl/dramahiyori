@@ -8,7 +8,7 @@ import {BatchImageUploader} from "./BatchImageUploader";
 
 type Tab="overview"|"titles"|"cast"|"media"|"users"|"settings";
 type SubtitleInput={language:string;label:string;fileUrl:string;kind:"subtitles"|"captions"};
-type EpisodeInput={editorId:string;title:string;seasonNumber:number;episodeNumber:number;synopsis:string;thumbnailUrl:string;durationMinutes:string;videoUrl:string;subtitles:SubtitleInput[]};
+type EpisodeInput={id?:string;editorId:string;title:string;seasonNumber:number;episodeNumber:number;synopsis:string;thumbnailUrl:string;durationMinutes:string;videoUrl:string;subtitles:SubtitleInput[]};
 const blank={title:"",type:"series",slug:"",alternativeTitle:"",synopsis:"",releaseYear:"",country:"South Korea",status:"completed",runtimeMinutes:"",posterUrl:"",backdropUrl:"",videoUrl:"",contentRating:"",genres:"",subtitleLanguages:"",published:false,featured:false,featuredOrder:0};
 const tabs:[Tab,string][]=[["overview","Overview"],["titles","Content"],["cast","Cast & crew"],["media","Media library"],["users","Users"],["settings","Site settings"]];
 const nextEditorId=()=>crypto.randomUUID();
@@ -30,7 +30,7 @@ export function AdminDashboard({name}:{name:string}) {
 
   function edit(item:any) {
     setForm({title:item.title,type:item.type,slug:item.slug,alternativeTitle:item.alternative_title||"",synopsis:item.synopsis||"",releaseYear:item.release_year||"",country:item.country||"",status:item.status||"completed",runtimeMinutes:item.runtime_minutes||"",posterUrl:item.poster_url||"",backdropUrl:item.backdrop_url||"",videoUrl:item.video_url||"",contentRating:item.content_rating||"",genres:(item.genres||[]).join(", "),subtitleLanguages:Array.isArray(JSON.parse(item.subtitle_languages||"[]"))?JSON.parse(item.subtitle_languages||"[]").join(", "):"",published:item.published===1,featured:item.featured===1,featuredOrder:Number(item.featured_order)||0,id:item.id});
-    setEpisodes((item.episodes||[]).map((episode:any)=>({editorId:nextEditorId(),title:episode.title,seasonNumber:Number(episode.season_number)||1,episodeNumber:Number(episode.episode_number)||1,synopsis:episode.synopsis||"",thumbnailUrl:episode.thumbnail_url||"",durationMinutes:episode.duration_minutes==null?"":String(episode.duration_minutes),videoUrl:episode.video_url||"",subtitles:(episode.subtitles||[]).map((track:any)=>({language:track.language||"",label:track.label||"",fileUrl:track.fileUrl||"",kind:track.kind==="captions"?"captions":"subtitles"}))})));
+    setEpisodes((item.episodes||[]).map((episode:any)=>({id:episode.id,editorId:nextEditorId(),title:episode.title,seasonNumber:Number(episode.season_number)||1,episodeNumber:Number(episode.episode_number)||1,synopsis:episode.synopsis||"",thumbnailUrl:episode.thumbnail_url||"",durationMinutes:episode.duration_minutes==null?"":String(episode.duration_minutes),videoUrl:episode.video_url||"",subtitles:(episode.subtitles||[]).map((track:any)=>({language:track.language||"",label:track.label||"",fileUrl:track.fileUrl||"",kind:track.kind==="captions"?"captions":"subtitles"}))})));
     setGallery((item.gallery||[]).map((image:any)=>({url:image.image_url,caption:image.caption||"",attribution:image.attribution||""})));
     setEditing(true);setTab("titles");setMessage("");setError("");window.scrollTo({top:0,behavior:"smooth"});
   }

@@ -2,7 +2,8 @@ import { currentAdmin } from "@/lib/auth";
 import { badRequest, json, readJson, sameOriginOrReject } from "@/lib/api";
 import { database, type DatabaseAdapter } from "@/lib/db";
 import { isAllowedMediaUrl, isValidMediaUrl } from "@/lib/security";
-import { recordMediaUsage, recordTitleImageUsages } from "@/lib/media-usage";
+import { recordTitleImageUsages } from "@/lib/media-usage";
+import { persistTitleEpisodes } from "@/lib/title-episodes";
 import { randomUUID } from "node:crypto";
 
 export const runtime="nodejs";
@@ -46,12 +47,17 @@ function validTitle(body:Record<string,unknown>) {
   if(body.episodes!==undefined) {
     if(!Array.isArray(body.episodes)||body.episodes.length>250)return {error:"Episodes must be a list with no more than 250 entries."};
     episodes=body.episodes as Record<string,unknown>[];
+    const episodeIds=new Set<string>();
+    const episodePositions=new Set<string>();
     for(let i=0;i<episodes.length;i++) {
       const ep=episodes[i]; const name=typeof ep?.title==="string"?ep.title.trim():""; const url=typeof ep?.videoUrl==="string"?ep.videoUrl.trim():"";
+      if(ep?.id!==undefined&&(typeof ep.id!=="string"||!/^[a-f\d]{8}-[a-f\d]{4}-4[a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i.test(ep.id)||episodeIds.has(ep.id)))return {error:`Episode ${i+1} has an invalid record ID.`};
+      if(typeof ep?.id==="string")episodeIds.add(ep.id);
       const tracks=Array.isArray(ep?.subtitles)?ep.subtitles as Record<string,unknown>[]:[];
       if(!name||name.length>160||!isValidMediaUrl(url)||tracks.length>20||tracks.some(track=>typeof track.fileUrl!=="string"||!isAllowedMediaUrl(track.fileUrl)))return {error:`Check the title, video URL, and subtitle URLs for episode ${i+1}.`};
       const seasonNumber=ep?.seasonNumber===undefined?1:Number(ep.seasonNumber),episodeNumber=ep?.episodeNumber===undefined?i+1:Number(ep.episodeNumber);
       if(!Number.isInteger(seasonNumber)||seasonNumber<1||seasonNumber>30||!Number.isInteger(episodeNumber)||episodeNumber<1||episodeNumber>500)return {error:`Episode ${i+1} has an invalid season or episode number.`};
+      const position=`${seasonNumber}:${episodeNumber}`;if(episodePositions.has(position))return {error:`Two episodes use the same season and episode number (${seasonNumber} · ${episodeNumber}).`};episodePositions.add(position);
       if(typeof ep?.thumbnailUrl==="string"&&ep.thumbnailUrl&&!isValidMediaUrl(ep.thumbnailUrl))return {error:`Episode ${i+1} has an invalid thumbnail URL.`};
     }
   }
@@ -72,25 +78,6 @@ async function writeGenres(db:DatabaseAdapter,titleId:string,genres:string[]) {
 async function writeGallery(db:DatabaseAdapter,titleId:string,gallery:GalleryInput[]) {
   await db.prepare("DELETE FROM title_gallery WHERE title_id=?").run(titleId);
   for(const [sortOrder,image] of gallery.entries())await db.prepare("INSERT INTO title_gallery(id,title_id,image_url,caption,attribution,sort_order) VALUES(?,?,?,?,?,?)").run(randomUUID(),titleId,image.url,image.caption,image.attribution,sortOrder);
-}
-async function writeEpisodes(db:DatabaseAdapter,titleId:string,episodes:Record<string,unknown>[]) {
-  await db.prepare("UPDATE watch_progress SET episode_id=NULL WHERE episode_id IN (SELECT e.id FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE s.title_id=?)").run(titleId);
-  await db.prepare("UPDATE viewing_history SET episode_id=NULL WHERE episode_id IN (SELECT e.id FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE s.title_id=?)").run(titleId);
-  await db.prepare("DELETE FROM subtitle_tracks WHERE episode_id IN (SELECT e.id FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE s.title_id=?)").run(titleId);
-  await db.prepare("DELETE FROM episodes WHERE season_id IN (SELECT id FROM seasons WHERE title_id=?)").run(titleId);
-  await db.prepare("DELETE FROM seasons WHERE title_id=?").run(titleId);
-  if(!episodes.length)return;
-  const seasonIds=new Map<number,string>();
-  for(const ep of episodes){const seasonNumber=Number(ep.seasonNumber)||1;if(!seasonIds.has(seasonNumber)){const seasonId=randomUUID();seasonIds.set(seasonNumber,seasonId);await db.prepare("INSERT INTO seasons(id,title_id,season_number,name) VALUES(?,?,?,?)").run(seasonId,titleId,seasonNumber,"Season "+seasonNumber);}}
-  for(let index=0;index<episodes.length;index++){
-    const ep=episodes[index],episodeId=randomUUID();
-    const seasonNumber=Number(ep.seasonNumber)||1,episodeNumber=Number(ep.episodeNumber)||index+1,seasonId=seasonIds.get(seasonNumber)!;
-    const thumbnailUrl=typeof ep.thumbnailUrl==="string"&&isValidMediaUrl(ep.thumbnailUrl)?ep.thumbnailUrl:"";
-    await db.prepare("INSERT INTO episodes(id,season_id,episode_number,title,synopsis,thumbnail_url,duration_minutes,video_url) VALUES(?,?,?,?,?,?,?,?)").run(episodeId,seasonId,episodeNumber,String(ep.title).trim(),typeof ep.synopsis==="string"?ep.synopsis.slice(0,1000):"",thumbnailUrl,Number.isInteger(Number(ep.durationMinutes))?Number(ep.durationMinutes)||null:null,typeof ep.videoUrl==="string"?ep.videoUrl.trim():"");
-    await recordMediaUsage(db,thumbnailUrl,{episodeId},"episode_thumbnail");
-    const tracks=Array.isArray(ep.subtitles)?ep.subtitles as Record<string,unknown>[]:[];
-    for(const track of tracks)if(typeof track.language==="string"&&typeof track.fileUrl==="string")await db.prepare("INSERT INTO subtitle_tracks(id,episode_id,language,label,file_url,kind) VALUES(?,?,?,?,?,?)").run(randomUUID(),episodeId,track.language.slice(0,30),typeof track.label==="string"?track.label.slice(0,80):track.language,track.fileUrl,track.kind==="captions"?"captions":"subtitles");
-  }
 }
 export async function GET() {
   const admin=await currentAdmin(); if(!admin)return badRequest("Administrator access is required.",403);
@@ -117,12 +104,12 @@ export async function POST(request:Request) {
     await database.transaction(async tx=>{
       await tx.prepare(`INSERT INTO titles(id,type,slug,title,alternative_title,synopsis,release_year,country,status,runtime_minutes,poster_url,backdrop_url,content_rating,subtitle_languages,video_url,published,featured,featured_order,demo,updated_at)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,CURRENT_TIMESTAMP)`).run(id,data.type,slug,data.title,data.alternative,data.synopsis,data.releaseYear,data.country,data.status,data.runtime,data.poster,data.backdrop,data.rating,JSON.stringify(data.languages),data.video,data.published?1:0,data.featured?1:0,data.featuredOrder);
-      await writeGenres(tx,id,data.genres); await writeEpisodes(tx,id,data.type==="series"?data.episodes:[]); await writeGallery(tx,id,data.gallery);
+      await writeGenres(tx,id,data.genres); await persistTitleEpisodes(tx,id,data.type==="series"?data.episodes:[]); await writeGallery(tx,id,data.gallery);
       await recordTitleImageUsages(tx,id,{poster:data.poster,backdrop:data.backdrop,gallery:data.gallery});
       await audit(tx,admin.id,"content.create",id,{title:data.title});
     });
     return json({id,slug},201);
-  } catch { return badRequest("That slug may already be in use, or the record could not be saved.",409); }
+  } catch(error) { return badRequest(error instanceof Error&&error.message==="INVALID_EPISODE_ID"?"One of the selected episodes no longer belongs to this title.":"That slug may already be in use, or the record could not be saved.",409); }
 }
 export async function PUT(request:Request) {
   const rejected=sameOriginOrReject(request); if(rejected)return rejected;
@@ -135,12 +122,12 @@ export async function PUT(request:Request) {
     const saved=await database.transaction(async tx=>{
       const result=await tx.prepare(`UPDATE titles SET type=?,slug=?,title=?,alternative_title=?,synopsis=?,release_year=?,country=?,status=?,runtime_minutes=?,poster_url=?,backdrop_url=?,content_rating=?,subtitle_languages=?,video_url=?,published=?,featured=?,featured_order=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(data.type,slug,data.title,data.alternative,data.synopsis,data.releaseYear,data.country,data.status,data.runtime,data.poster,data.backdrop,data.rating,JSON.stringify(data.languages),data.video,data.published?1:0,data.featured?1:0,data.featuredOrder,titleId);
       if(!Number(result.changes))return false;
-       await writeGenres(tx,titleId,data.genres); await writeEpisodes(tx,titleId,data.type==="series"?data.episodes:[]); await writeGallery(tx,titleId,data.gallery);
+       await writeGenres(tx,titleId,data.genres); await persistTitleEpisodes(tx,titleId,data.type==="series"?data.episodes:[]); await writeGallery(tx,titleId,data.gallery);
        await recordTitleImageUsages(tx,titleId,{poster:data.poster,backdrop:data.backdrop,gallery:data.gallery});
       await audit(tx,admin.id,"content.update",titleId,{title:data.title}); return true;
     });
     return saved?json({saved:true}):badRequest("That title could not be found.",404);
-  } catch { return badRequest("The title could not be saved. Check that its slug is unique.",409); }
+  } catch(error) { return badRequest(error instanceof Error&&error.message==="INVALID_EPISODE_ID"?"One of the selected episodes no longer belongs to this title.":"The title could not be saved. Check that its slug is unique.",409); }
 }
 export async function DELETE(request:Request) {
   const rejected=sameOriginOrReject(request); if(rejected)return rejected;

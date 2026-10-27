@@ -33,6 +33,7 @@ export default async function TitlePage({params}:{params:Promise<{slug:string}>}
   const playable=Boolean(validTitleStream||episodes.some(episode=>episode.video_url&&isValidMediaUrl(episode.video_url)));
   const watchHref="/watch?"+new URLSearchParams({slug:item.slug,...(firstPlayableEpisode?{episode:firstPlayableEpisode.id}:{})}).toString();
   const backdrop=safeBackdrop(item.backdrop_url);
+  const detailFacts=[item.release_year?String(item.release_year):"",item.country||"",item.status==="ongoing"?"Ongoing":item.status==="upcoming"?"Upcoming":"Completed",item.runtime_minutes?`${item.runtime_minutes} min`:"",item.content_rating||""].filter(Boolean);
 
   return <main className="detail-page">
     <section className="detail-hero" aria-hidden="true" style={{backgroundImage:backdrop?`linear-gradient(90deg,rgba(8,8,13,.94),rgba(8,8,13,.62) 52%,rgba(8,8,13,.15)),linear-gradient(0deg,#08080d,transparent 60%),url("${backdrop}")`:`radial-gradient(ellipse at 75% 20%,rgba(232,62,104,.15),transparent 34%),linear-gradient(180deg,#17111d,#08080d)`}}/>
@@ -43,7 +44,7 @@ export default async function TitlePage({params}:{params:Promise<{slug:string}>}
         <span className="eyebrow detail-eyebrow">{item.type==="movie"?"A DEARDRAMA FILM":"A DEARDRAMA SERIES"}{item.demo===1&&" · SAMPLE RECORD"}</span>
         <h1>{item.title}</h1>
         {item.alternative_title&&<p className="detail-alt">{item.alternative_title}</p>}
-        <div className="detail-facts"><span>{item.release_year||"Year not set"}</span><i>·</i><span>{item.country||"Country not set"}</span><i>·</i><span>{item.status==="ongoing"?"Ongoing":item.status==="upcoming"?"Upcoming":"Completed"}</span>{item.runtime_minutes&&<><i>·</i><span>{item.runtime_minutes} min</span></>}{item.content_rating&&<><i>·</i><span>{item.content_rating}</span></>}</div>
+        {!!detailFacts.length&&<div className="detail-facts">{detailFacts.map((fact,index)=><span key={`${index}-${fact}`}>{index>0&&<i aria-hidden="true">·</i>}{fact}</span>)}</div>}
         <div className="hero-genres detail-genres">{item.genres?.map(genre=><Link href={"/browse?genre="+encodeURIComponent(genre)} key={genre}>{genre}</Link>)}</div>
         {item.synopsis&&<p className="detail-synopsis">{item.synopsis}</p>}
         {item.demo===1&&<p className="demo-disclaimer">This is an original sample record used to demonstrate the catalog. It has no verified cast, rating, or streaming availability.</p>}

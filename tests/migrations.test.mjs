@@ -23,6 +23,7 @@ test("an existing 001 database upgrades in place and serves cast, galleries, and
     import assert from "node:assert/strict";
     const {database,listTitles,getTitle,getCastMember,listCastMembers,listCastProfessions}=await import("./lib/db.ts");
     const {recordMediaUsage,recordTitleImageUsages,recordCastImageUsages}=await import("./lib/media-usage.ts");
+    const {persistTitleEpisodes}=await import("./lib/title-episodes.ts");
     const applied=await database.prepare("SELECT id FROM schema_migrations ORDER BY id").all();
     assert.deepEqual(applied.map(row=>row.id),["001_initial","002_cast_gallery_media","003_media_associations","004_featured_order"]);
     const tables=await database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('cast_members','title_cast','title_gallery','cast_gallery','media_assets','media_asset_usages') ORDER BY name").all();
@@ -36,7 +37,11 @@ test("an existing 001 database upgrades in place and serves cast, galleries, and
     await database.prepare("INSERT INTO seasons(id,title_id,season_number,name) VALUES(?,?,?,?)").run("audit-season-2","migration-title",2,"Season 2");
     await database.prepare("INSERT INTO episodes(id,season_id,episode_number,title,video_url) VALUES(?,?,?,?,?)").run("audit-episode-1","audit-season-1",1,"Unstreamed opener","");
     await database.prepare("INSERT INTO episodes(id,season_id,episode_number,title,video_url) VALUES(?,?,?,?,?)").run("audit-episode-2","audit-season-2",1,"First available episode","https://media.example.test/episode.mp4");
+    await database.prepare("INSERT INTO episodes(id,season_id,episode_number,title,video_url) VALUES(?,?,?,?,?)").run("audit-episode-3","audit-season-1",2,"Second opener","");
     await database.prepare("INSERT INTO subtitle_tracks(id,episode_id,language,label,file_url,kind) VALUES(?,?,?,?,?,?)").run("audit-subtitle","audit-episode-2","en","English","https://media.example.test/episode.vtt","subtitles");
+    await database.prepare("INSERT INTO users(id,email,display_name,password_hash) VALUES(?,?,?,?)").run("audit-user","audit-user@example.test","Audit User","unused");
+    await database.prepare("INSERT INTO watch_progress(user_id,title_id,episode_id,position_seconds,duration_seconds) VALUES(?,?,?,?,?)").run("audit-user","migration-title","audit-episode-1",87,1200);
+    await database.prepare("INSERT INTO viewing_history(user_id,title_id,episode_id) VALUES(?,?,?)").run("audit-user","migration-title","audit-episode-1");
     await database.prepare("INSERT INTO cast_members(id,slug,name,biography,portrait_url) VALUES(?,?,?,?,?)").run("audit-person","migration-audit-person","Migration Audit Person","Existing-profile check","https://media.example.test/person.jpg");
     await database.prepare("INSERT INTO title_cast(id,title_id,cast_member_id,character_name,role_type) VALUES(?,?,?,?,?)").run("audit-credit","migration-title","audit-person","Lead","cast");
     await database.prepare("INSERT INTO title_gallery(id,title_id,image_url,caption) VALUES(?,?,?,?)").run("audit-title-photo","migration-title","https://media.example.test/title.jpg","Title still");
@@ -54,6 +59,15 @@ test("an existing 001 database upgrades in place and serves cast, galleries, and
     assert.equal((await database.prepare("SELECT role FROM media_asset_usages WHERE cast_member_id=?").get("audit-person")).role,"portrait");
     await recordMediaUsage(database,"https://media.example.test/unmanaged.jpg",{titleId:"migration-title"},"gallery");
     assert.equal(Number((await database.prepare("SELECT COUNT(*) AS n FROM media_asset_usages WHERE title_id=?").get("migration-title")).n),2);
+    await persistTitleEpisodes(database,"migration-title",[
+      {id:"audit-episode-3",seasonNumber:1,episodeNumber:1,title:"Second opener",videoUrl:""},
+      {id:"audit-episode-1",seasonNumber:1,episodeNumber:2,title:"Unstreamed opener",videoUrl:""},
+      {id:"audit-episode-2",seasonNumber:2,episodeNumber:1,title:"First available episode",videoUrl:"https://media.example.test/episode.mp4",subtitles:[{language:"en",label:"English",fileUrl:"https://media.example.test/episode.vtt",kind:"subtitles"}]},
+    ]);
+    assert.equal((await database.prepare("SELECT id FROM episodes WHERE season_id=? AND episode_number=2").get("audit-season-1")).id,"audit-episode-1");
+    assert.equal((await database.prepare("SELECT episode_id,position_seconds FROM watch_progress WHERE user_id=? AND title_id=?").get("audit-user","migration-title")).episode_id,"audit-episode-1");
+    assert.equal(Number((await database.prepare("SELECT position_seconds FROM watch_progress WHERE user_id=? AND title_id=?").get("audit-user","migration-title")).position_seconds),87);
+    assert.equal((await database.prepare("SELECT episode_id FROM viewing_history WHERE user_id=? AND title_id=?").get("audit-user","migration-title")).episode_id,"audit-episode-1");
     const listed=await listTitles({q:"Migration Compatibility Audit",genre:"Audit Genre"});
     assert.equal(listed.length,1);
     assert.equal(listed[0].has_playable_source,1);

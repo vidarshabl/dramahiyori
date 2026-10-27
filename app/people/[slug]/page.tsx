@@ -28,7 +28,7 @@ export default async function CastProfilePage({params}:{params:Promise<{slug:str
 
     {credits.length>0&&<section className="person-section"><div className="section-heading"><div><span className="eyebrow">SELECTED CREDITS</span><h2>Credits</h2></div></div><div className="person-filmography">{credits.map(credit=><Link href={"/title/"+credit.title_slug} className="person-credit" key={credit.id}>
       <div className="person-credit-poster">{credit.poster_url?<RemoteImage fill src={credit.poster_url} alt={credit.title+" poster"} sizes="(max-width: 650px) 27vw, 130px" fallbackLabel={credit.title}/>:<span aria-hidden="true">✦</span>}</div>
-      <div><strong>{credit.title}</strong><span>{credit.release_year||"Year not set"} · {credit.title_type==="movie"?"Film":"Series"}</span><small>{credit.role_type==="cast"?(credit.character_name||"Cast"):credit.role_type}</small></div>
+      <div><strong>{credit.title}</strong><span>{credit.release_year?`${credit.release_year} · `:""}{credit.title_type==="movie"?"Film":"Series"}</span><small>{credit.role_type==="cast"?(credit.character_name||"Cast"):credit.role_type}</small></div>
     </Link>)}</div></section>}
 
     {person.gallery&&person.gallery.length>0&&<section className="person-section"><div className="section-heading"><div><span className="eyebrow">PORTRAITS &amp; MOMENTS</span><h2>Photos</h2></div></div><MediaGallery images={person.gallery as GalleryImage[]} label={person.name+" photos"}/></section>}

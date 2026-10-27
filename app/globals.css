@@ -646,7 +646,8 @@ button{color:inherit}
  .hero-art,.brand-mark{animation:none!important;transform:none!important}
  .hero-copy>*{opacity:1!important;animation:none!important;filter:none!important;transform:none!important}
  .scroll-reveal{opacity:1!important;transform:none!important;transition:none!important}
- .media-card:hover,.continue-card:hover{transform:none!important}
+ .media-card:hover,.continue-card:hover,.save-card:hover,.mood-tile:hover,.button:hover,.rail-controls button:hover:not(:disabled),.cast-card:hover,.person-credit:hover,.people-directory-card:hover{transform:none!important}
+ .media-card:hover .poster-wrap img,.continue-card:hover .continue-thumb img,.cast-card:hover img,.gallery-thumb:hover img,.people-directory-card:hover img{transform:none!important}
 }
 
 /* Batch media workbench and structured content editors */

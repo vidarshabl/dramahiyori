@@ -49,7 +49,7 @@ test("admin creates and edits content; title and genre filters use saved data",a
  const adminTitles=await request("/api/admin/titles",{cookie:adminCookie});const saved=adminTitles.data.items.find(x=>x.id===titleId);assert.ok(saved);assert.equal(saved.video_url,body.videoUrl);assert.equal(saved.episodes[0].video_url,body.episodes[0].videoUrl);episodeId=saved.episodes[0].id;
  const edited=await request("/api/admin/titles",{method:"PUT",cookie:adminCookie,body:{...body,id:titleId,title:"Test Spring Letters — edited",status:"completed",episodes:body.episodes}});
  assert.equal(edited.response.status,200,JSON.stringify(edited.data));
- const refreshed=await request("/api/admin/titles",{cookie:adminCookie});episodeId=refreshed.data.items.find(x=>x.id===titleId).episodes[0].id;
+ const refreshed=await request("/api/admin/titles",{cookie:adminCookie});episodeId=refreshed.data.items.find(x=>x.id===titleId).episodes[0].id;assert.equal(episodeId,saved.episodes[0].id,"editing a title preserves episode identity and playback progress links");
  const filtered=await request("/api/titles?status=completed&q=Test+Spring");assert.equal(filtered.data.items[0].title,"Test Spring Letters — edited");
  const savedTitle=refreshed.data.items.find(x=>x.id===titleId);assert.equal(savedTitle.gallery[0].image_url,body.gallery[0].url);
  castSlug="test-cast-"+randomUUID().slice(0,8);
