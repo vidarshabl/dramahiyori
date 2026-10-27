@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { currentAdmin } from "@/lib/auth";
 import { badRequest, json, sameOriginOrReject } from "@/lib/api";
 import { database } from "@/lib/db";
+import { MEDIA_ROLES, type MediaRole } from "@/lib/media-usage";
 
 export const runtime="nodejs";
 const MAX_IMAGE_BYTES=4*1024*1024;
@@ -28,17 +29,30 @@ function safeBasename(filename:string) {
 
 export async function GET() {
   const admin=await currentAdmin();if(!admin)return badRequest("Administrator access is required.",403);
-  const items=await database.prepare("SELECT id,url,pathname,filename,content_type,size_bytes,created_at FROM media_assets ORDER BY created_at DESC LIMIT 300").all();
-  return json({items,storageConfigured:blobConfigured(),maxImageBytes:MAX_IMAGE_BYTES});
+  const [items,usages]=await Promise.all([
+    database.prepare("SELECT id,url,pathname,filename,content_type,size_bytes,role,created_at FROM media_assets ORDER BY created_at DESC LIMIT 300").all() as Promise<Record<string,any>[]>,
+    database.prepare(`SELECT u.media_asset_id,u.role,u.sort_order,u.caption,u.attribution,
+      t.title AS title_name,t.slug AS title_slug,c.name AS cast_name,c.slug AS cast_slug,e.title AS episode_name
+      FROM media_asset_usages u LEFT JOIN titles t ON t.id=u.title_id
+      LEFT JOIN cast_members c ON c.id=u.cast_member_id LEFT JOIN episodes e ON e.id=u.episode_id
+      ORDER BY u.sort_order,u.id`).all() as Promise<Record<string,any>[]>,
+  ]);
+  const byAsset=new Map<string,Record<string,any>[]>();
+  for(const usage of usages)byAsset.set(usage.media_asset_id,[...(byAsset.get(usage.media_asset_id)||[]),usage]);
+  return json({items:items.map(item=>({...item,usages:byAsset.get(item.id)||[]})),storageConfigured:blobConfigured(),maxImageBytes:MAX_IMAGE_BYTES});
 }
 
 export async function POST(request:Request) {
   const rejected=sameOriginOrReject(request);if(rejected)return rejected;
   const admin=await currentAdmin();if(!admin)return badRequest("Administrator access is required.",403);
   if(!blobConfigured())return badRequest("Persistent image storage is not configured. Connect a Vercel Blob store to this project first.",503);
-  let file:FormDataEntryValue|null;
-  try {file=(await request.formData()).get("file");} catch {return badRequest("Choose an image file to upload.");}
+  let file:FormDataEntryValue|null,roleValue:FormDataEntryValue|null,uploadIdValue:FormDataEntryValue|null;
+  try {const formData=await request.formData();file=formData.get("file");roleValue=formData.get("role");uploadIdValue=formData.get("uploadId");} catch {return badRequest("Choose an image file to upload.");}
   if(typeof File==="undefined"||!(file instanceof File))return badRequest("Choose an image file to upload.");
+  const role=(typeof roleValue==="string"&&MEDIA_ROLES.includes(roleValue as MediaRole)?roleValue:"other") as MediaRole;
+  const uploadId=typeof uploadIdValue==="string"?uploadIdValue:"";
+  if(uploadId&&!/^[a-f\d]{8}-[a-f\d]{4}-4[a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i.test(uploadId))return badRequest("This upload could not be identified. Select the file again.");
+  if(uploadId){const existing=await database.prepare("SELECT id,url,pathname,filename,content_type,size_bytes,role,created_at FROM media_assets WHERE upload_id=?").get(uploadId) as Record<string,any>|undefined;if(existing)return json({item:{...existing,usages:[]}});}
   if(file.size<1||file.size>MAX_IMAGE_BYTES)return badRequest("Images must be smaller than 4 MB.",413);
   const bytes=new Uint8Array(await file.arrayBuffer());
   const image=inspectImage(bytes);
@@ -48,12 +62,14 @@ export async function POST(request:Request) {
   try {
     const blob=await put(pathname,file,{access:"public",addRandomSuffix:false,contentType:image.contentType,cacheControlMaxAge:60*60*24*30});
     uploadedUrl=blob.url;
-    await database.transaction(async tx=>{
-      await tx.prepare("INSERT INTO media_assets(id,url,pathname,filename,content_type,size_bytes,uploaded_by) VALUES(?,?,?,?,?,?,?)").run(id,blob.url,blob.pathname,filename,image.contentType,file.size,admin.id);
+    const saved=await database.transaction(async tx=>{
+      await tx.prepare("INSERT INTO media_assets(id,url,pathname,filename,content_type,size_bytes,role,upload_id,uploaded_by) VALUES(?,?,?,?,?,?,?,?,?)").run(id,blob.url,blob.pathname,filename,image.contentType,file.size,role,uploadId||null,admin.id);
+      return await tx.prepare("SELECT created_at FROM media_assets WHERE id=?").get(id) as {created_at:string}|undefined;
     });
-    return json({item:{id,url:blob.url,pathname:blob.pathname,filename,content_type:image.contentType,size_bytes:file.size}} ,201);
+    return json({item:{id,url:blob.url,pathname:blob.pathname,filename,content_type:image.contentType,size_bytes:file.size,role,created_at:saved?.created_at||new Date().toISOString(),usages:[]}} ,201);
   } catch {
     if(uploadedUrl)await del(uploadedUrl).catch(()=>{});
+    if(uploadId){try{const existing=await database.prepare("SELECT id,url,pathname,filename,content_type,size_bytes,role,created_at FROM media_assets WHERE upload_id=?").get(uploadId) as Record<string,any>|undefined;if(existing)return json({item:{...existing,usages:[]}});}catch{}}
     return badRequest("The image could not be saved to the media library. Please try again.",502);
   }
 }
@@ -65,6 +81,8 @@ export async function DELETE(request:Request) {
   const id=new URL(request.url).searchParams.get("id");if(!id)return badRequest("Choose an image to remove.");
   const asset=await database.prepare("SELECT id,url,pathname FROM media_assets WHERE id=?").get(id) as {id:string;url:string;pathname:string}|undefined;
   if(!asset)return badRequest("That media item could not be found.",404);
+  const usage=await database.prepare("SELECT COUNT(*) AS n FROM media_asset_usages WHERE media_asset_id=?").get(id) as {n:number};
+  if(Number(usage.n)>0)return badRequest("This image is assigned to content. Remove its associations before deleting it.",409);
   const refs=[
     "SELECT COUNT(*) AS n FROM titles WHERE poster_url=? OR backdrop_url=?",
     "SELECT COUNT(*) AS n FROM episodes WHERE thumbnail_url=?",

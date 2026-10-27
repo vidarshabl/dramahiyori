@@ -3,16 +3,20 @@
 import Link from "next/link";
 import {FormEvent,useCallback,useEffect,useState} from "react";
 import {useRouter} from "next/navigation";
-import {CastStudio,MediaLibrary} from "./AdminCatalogExtensions";
+import {CastStudio,MediaLibrary,SortablePhotoEditor,type MediaItem} from "./AdminCatalogExtensions";
+import {BatchImageUploader} from "./BatchImageUploader";
 
 type Tab="overview"|"titles"|"cast"|"media"|"users"|"settings";
-const blank={title:"",type:"series",slug:"",alternativeTitle:"",synopsis:"",releaseYear:"",country:"South Korea",status:"completed",runtimeMinutes:"",posterUrl:"",backdropUrl:"",videoUrl:"",contentRating:"",genres:"",subtitleLanguages:"",published:false,featured:false,episodes:"[]"};
+type SubtitleInput={language:string;label:string;fileUrl:string;kind:"subtitles"|"captions"};
+type EpisodeInput={editorId:string;title:string;seasonNumber:number;episodeNumber:number;synopsis:string;thumbnailUrl:string;durationMinutes:string;videoUrl:string;subtitles:SubtitleInput[]};
+const blank={title:"",type:"series",slug:"",alternativeTitle:"",synopsis:"",releaseYear:"",country:"South Korea",status:"completed",runtimeMinutes:"",posterUrl:"",backdropUrl:"",videoUrl:"",contentRating:"",genres:"",subtitleLanguages:"",published:false,featured:false,featuredOrder:0};
 const tabs:[Tab,string][]=[["overview","Overview"],["titles","Content"],["cast","Cast & crew"],["media","Media library"],["users","Users"],["settings","Site settings"]];
+const nextEditorId=()=>crypto.randomUUID();
 
 export function AdminDashboard({name}:{name:string}) {
   const [tab,setTab]=useState<Tab>("overview");
   const [overview,setOverview]=useState<any>(null),[titles,setTitles]=useState<any[]>([]),[users,setUsers]=useState<any[]>([]),[settings,setSettings]=useState<any>({}),[mediaAssets,setMediaAssets]=useState<any[]>([]);
-  const [form,setForm]=useState<any>(blank),[gallery,setGallery]=useState<{url:string;caption:string;attribution:string}[]>([]),[editing,setEditing]=useState(false),[query,setQuery]=useState(""),[message,setMessage]=useState(""),[error,setError]=useState(""),[busy,setBusy]=useState(false);
+  const [form,setForm]=useState<any>(blank),[gallery,setGallery]=useState<{url:string;caption:string;attribution:string}[]>([]),[episodes,setEpisodes]=useState<EpisodeInput[]>([]),[editing,setEditing]=useState(false),[query,setQuery]=useState(""),[message,setMessage]=useState(""),[error,setError]=useState(""),[busy,setBusy]=useState(false);
   const router=useRouter();
 
   const loadOverview=useCallback(async()=>{const response=await fetch("/api/admin/overview");if(response.status===403){router.replace("/admin/login");return;}const data=await response.json();if(!response.ok)throw new Error(data.error||"Dashboard overview could not be loaded.");setOverview(data);},[router]);
@@ -25,17 +29,16 @@ export function AdminDashboard({name}:{name:string}) {
   useEffect(()=>{if(tab!=="users")return;const timer=setTimeout(()=>void loadUsers().catch(reason=>setError(reason instanceof Error?reason.message:"User accounts could not be loaded.")),220);return()=>clearTimeout(timer);},[tab,loadUsers]);
 
   function edit(item:any) {
-    setForm({title:item.title,type:item.type,slug:item.slug,alternativeTitle:item.alternative_title||"",synopsis:item.synopsis||"",releaseYear:item.release_year||"",country:item.country||"",status:item.status||"completed",runtimeMinutes:item.runtime_minutes||"",posterUrl:item.poster_url||"",backdropUrl:item.backdrop_url||"",videoUrl:item.video_url||"",contentRating:item.content_rating||"",genres:(item.genres||[]).join(", "),subtitleLanguages:Array.isArray(JSON.parse(item.subtitle_languages||"[]"))?JSON.parse(item.subtitle_languages||"[]").join(", "):"",published:item.published===1,featured:item.featured===1,episodes:JSON.stringify((item.episodes||[]).map((episode:any)=>({title:episode.title,seasonNumber:episode.season_number,episodeNumber:episode.episode_number,synopsis:episode.synopsis,thumbnailUrl:episode.thumbnail_url,durationMinutes:episode.duration_minutes,videoUrl:episode.video_url,subtitles:(episode.subtitles||[]).map((track:any)=>({language:track.language,label:track.label,fileUrl:track.fileUrl,kind:track.kind}))})),null,2),id:item.id});
+    setForm({title:item.title,type:item.type,slug:item.slug,alternativeTitle:item.alternative_title||"",synopsis:item.synopsis||"",releaseYear:item.release_year||"",country:item.country||"",status:item.status||"completed",runtimeMinutes:item.runtime_minutes||"",posterUrl:item.poster_url||"",backdropUrl:item.backdrop_url||"",videoUrl:item.video_url||"",contentRating:item.content_rating||"",genres:(item.genres||[]).join(", "),subtitleLanguages:Array.isArray(JSON.parse(item.subtitle_languages||"[]"))?JSON.parse(item.subtitle_languages||"[]").join(", "):"",published:item.published===1,featured:item.featured===1,featuredOrder:Number(item.featured_order)||0,id:item.id});
+    setEpisodes((item.episodes||[]).map((episode:any)=>({editorId:nextEditorId(),title:episode.title,seasonNumber:Number(episode.season_number)||1,episodeNumber:Number(episode.episode_number)||1,synopsis:episode.synopsis||"",thumbnailUrl:episode.thumbnail_url||"",durationMinutes:episode.duration_minutes==null?"":String(episode.duration_minutes),videoUrl:episode.video_url||"",subtitles:(episode.subtitles||[]).map((track:any)=>({language:track.language||"",label:track.label||"",fileUrl:track.fileUrl||"",kind:track.kind==="captions"?"captions":"subtitles"}))})));
     setGallery((item.gallery||[]).map((image:any)=>({url:image.image_url,caption:image.caption||"",attribution:image.attribution||""})));
     setEditing(true);setTab("titles");setMessage("");setError("");window.scrollTo({top:0,behavior:"smooth"});
   }
-  function newTitle(){setForm({...blank});setGallery([]);setEditing(true);setTab("titles");setMessage("");setError("");}
+  function newTitle(type:"series"|"movie"="series"){setForm({...blank,type});setGallery([]);setEpisodes([]);setEditing(true);setTab("titles");setMessage("");setError("");}
   async function saveTitle(event:FormEvent) {
     event.preventDefault();setBusy(true);setError("");setMessage("");
-    let episodes:any[]=[];
-    try{episodes=form.type==="series"?JSON.parse(form.episodes||"[]"):[];if(!Array.isArray(episodes))throw new Error();}
-    catch{setError("Check that the episode field is a valid JSON array.");setBusy(false);return;}
-    const body={...form,genres:form.genres.split(",").map((value:string)=>value.trim()).filter(Boolean),subtitleLanguages:form.subtitleLanguages.split(",").map((value:string)=>value.trim()).filter(Boolean),episodes,gallery:gallery.filter(image=>image.url.trim())};
+    const episodesForSave=form.type==="series"?episodes.map(({editorId,...episode})=>({...episode,durationMinutes:episode.durationMinutes===""?null:Number(episode.durationMinutes)})):[];
+    const body={...form,genres:form.genres.split(",").map((value:string)=>value.trim()).filter(Boolean),subtitleLanguages:form.subtitleLanguages.split(",").map((value:string)=>value.trim()).filter(Boolean),episodes:episodesForSave,gallery:gallery.filter(image=>image.url.trim())};
     try{const response=await fetch("/api/admin/titles",{method:form.id?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const data=await response.json();if(!response.ok)throw new Error(data.error||"The title could not be saved.");setMessage("Title saved.");setEditing(false);await Promise.all([loadTitles(),loadOverview()]);}
     catch(reason){setError(reason instanceof Error?reason.message:"Please try again.");}
     finally{setBusy(false);}
@@ -71,6 +74,7 @@ export function AdminDashboard({name}:{name:string}) {
 
       {tab==="overview"&&<>
         <div className="admin-page-intro"><h2>Good to see you, {name.split(" ")[0]}.</h2><p>Here is what’s in your DearDrama database right now.</p></div>
+        <div className="admin-quick-actions"><button className="button button-primary" onClick={()=>newTitle("series")}>＋ Add drama</button><button className="button button-glass" onClick={()=>newTitle("movie")}>＋ Add movie</button><button className="button button-glass" onClick={()=>{setTab("cast");setMessage("");setError("");}}>＋ Add cast member</button><button className="button button-glass" onClick={()=>setTab("media")}>＋ Upload photos</button></div>
         <div className="admin-stats">{[["Registered users",overview?.stats?.users],["Movies",overview?.stats?.movies],["Series",overview?.stats?.series],["Episodes",overview?.stats?.episodes],["Published",overview?.stats?.published],["Drafts",overview?.stats?.drafts],["Cast profiles",overview?.stats?.cast],["Uploaded images",overview?.stats?.media]].map(([label,value])=><div className="admin-stat" key={label as string}><span>{label}</span><strong>{value??"—"}</strong></div>)}</div>
         <section className="admin-section"><div className="admin-section-title"><h3>Recent content updates</h3><button onClick={()=>setTab("titles")}>Manage content →</button></div><AdminTitleTable items={overview?.titles||[]} onEdit={edit} onDelete={deleteTitle}/></section>
         <section className="admin-section"><div className="admin-section-title"><h3>Recent administrator activity</h3></div>{overview?.audit?.length?<div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Action</th><th>Record</th><th>Admin</th><th>When</th></tr></thead><tbody>{overview.audit.map((entry:any,index:number)=><tr key={index}><td>{entry.action}</td><td>{entry.entity_type} · {entry.entity_id.slice(0,8)}</td><td>{entry.email||"Account removed"}</td><td>{entry.created_at}</td></tr>)}</tbody></table></div>:<p className="admin-notice">No sensitive actions have been recorded yet.</p>}</section>
@@ -78,7 +82,7 @@ export function AdminDashboard({name}:{name:string}) {
 
       {tab==="titles"&&<>
         <div className="admin-page-intro"><h2>Content library</h2><p>Create and edit movies, series, genres, episodes, galleries, and authorized media URLs.</p></div>
-        <div className="admin-section"><div className="admin-section-title"><h3>{editing?(form.id?"Edit title":"New title"):"All titles"}</h3><div className="admin-actions"><button className="button button-primary" type="button" onClick={newTitle}>＋ Add title</button>{editing&&<button className="button button-glass" type="button" onClick={()=>setEditing(false)}>Cancel edit</button>}</div></div>
+        <div className="admin-section"><div className="admin-section-title"><h3>{editing?(form.id?"Edit title":"New title"):"All titles"}</h3><div className="admin-actions"><button className="button button-primary" type="button" onClick={()=>newTitle()}>＋ Add title</button>{editing&&<button className="button button-glass" type="button" onClick={()=>setEditing(false)}>Cancel edit</button>}</div></div>
           {editing&&<form className="admin-editor" onSubmit={saveTitle}>
             <datalist id="admin-media-urls">{mediaUrls.map(url=><option key={url} value={url}/>)}</datalist>
             <label>Title<input required maxLength={160} value={form.title} onChange={event=>setForm({...form,title:event.target.value})}/></label><label>Type<select value={form.type} onChange={event=>setForm({...form,type:event.target.value})}><option value="series">Series</option><option value="movie">Movie</option></select></label>
@@ -87,20 +91,13 @@ export function AdminDashboard({name}:{name:string}) {
             <label>Completion status<select value={form.status} onChange={event=>setForm({...form,status:event.target.value})}><option value="ongoing">Ongoing</option><option value="completed">Completed</option><option value="upcoming">Upcoming</option></select></label><label>Runtime in minutes (films)<input type="number" min="1" max="600" value={form.runtimeMinutes} onChange={event=>setForm({...form,runtimeMinutes:event.target.value})}/></label>
             <label className="wide">Synopsis<textarea maxLength={5000} value={form.synopsis} onChange={event=>setForm({...form,synopsis:event.target.value})}/></label>
             <label>Genre names<input value={form.genres} onChange={event=>setForm({...form,genres:event.target.value})} placeholder="Romance, Healing Romance"/></label><label>Subtitle languages<input value={form.subtitleLanguages} onChange={event=>setForm({...form,subtitleLanguages:event.target.value})} placeholder="English, Korean"/></label>
-            <label>Poster URL<input list="admin-media-urls" type="url" value={form.posterUrl} onChange={event=>setForm({...form,posterUrl:event.target.value})} placeholder="https://…"/></label><label>Backdrop URL<input list="admin-media-urls" type="url" value={form.backdropUrl} onChange={event=>setForm({...form,backdropUrl:event.target.value})} placeholder="https://…"/></label>
+            <label>Poster URL<input list="admin-media-urls" type="url" value={form.posterUrl} onChange={event=>setForm({...form,posterUrl:event.target.value})} placeholder="https://…"/>{!!mediaAssets.length&&<select aria-label="Choose an uploaded poster" value={mediaAssets.some(asset=>asset.url===form.posterUrl)?form.posterUrl:""} onChange={event=>setForm({...form,posterUrl:event.target.value})}><option value="">Choose from media library…</option>{mediaAssets.map(asset=><option key={asset.id} value={asset.url}>{asset.filename} · {asset.role}</option>)}</select>}</label><label>Backdrop URL<input list="admin-media-urls" type="url" value={form.backdropUrl} onChange={event=>setForm({...form,backdropUrl:event.target.value})} placeholder="https://…"/>{!!mediaAssets.length&&<select aria-label="Choose an uploaded backdrop" value={mediaAssets.some(asset=>asset.url===form.backdropUrl)?form.backdropUrl:""} onChange={event=>setForm({...form,backdropUrl:event.target.value})}><option value="">Choose from media library…</option>{mediaAssets.map(asset=><option key={asset.id} value={asset.url}>{asset.filename} · {asset.role}</option>)}</select>}</label>
             <label>Content rating (only if verified)<input value={form.contentRating} onChange={event=>setForm({...form,contentRating:event.target.value})}/></label><label>Film video URL<input type="url" value={form.videoUrl} onChange={event=>setForm({...form,videoUrl:event.target.value})} placeholder="https://archive.org/download/.../video.mp4"/></label>
-            {form.type==="series"&&<label className="wide">Episodes (JSON, ordered as listed)<textarea value={form.episodes} onChange={event=>setForm({...form,episodes:event.target.value})} placeholder='[{"title":"Episode 1","videoUrl":"https://archive.org/download/example/video.mp4"}]'/><small>Each entry supports title, synopsis, thumbnailUrl, durationMinutes, and videoUrl. Video URLs may use any valid HTTPS host.</small></label>}
-            <section className="admin-nested-editor wide" aria-label="Title gallery">
-              <div className="admin-section-title"><div><h4>Gallery images</h4><small>Add up to 30 images with optional captions and attribution.</small></div><button type="button" disabled={gallery.length>=30} onClick={()=>setGallery(rows=>[...rows,{url:"",caption:"",attribution:""}])}>＋ Add image</button></div>
-              {gallery.map((image,index)=><div className="admin-inline-row" key={index}>
-                <label>Image URL<input required type="url" list="admin-media-urls" value={image.url} placeholder="https://…" onChange={event=>setGallery(rows=>rows.map((row,i)=>i===index?{...row,url:event.target.value}:row))}/></label>
-                <label>Caption<input maxLength={200} value={image.caption} onChange={event=>setGallery(rows=>rows.map((row,i)=>i===index?{...row,caption:event.target.value}:row))}/></label>
-                <label>Attribution<input maxLength={200} value={image.attribution} onChange={event=>setGallery(rows=>rows.map((row,i)=>i===index?{...row,attribution:event.target.value}:row))}/></label>
-                <button type="button" className="row-remove" aria-label={`Remove gallery image ${index+1}`} onClick={()=>setGallery(rows=>rows.filter((_,i)=>i!==index))}>×</button>
-              </div>)}
-              {!gallery.length&&<p className="admin-muted">No gallery images added yet.</p>}
-            </section>
+            <BatchImageUploader title="Upload title images" description="Drop several files at once; assign each as a poster, backdrop, or gallery photo. Save this title to persist the assignments." roles={[{value:"poster",label:"Main poster"},{value:"backdrop",label:"Hero backdrop"},{value:"gallery",label:"Gallery photo"}]} onUploaded={(asset,role)=>{if(role==="poster")setForm((current:any)=>({...current,posterUrl:asset.url}));else if(role==="backdrop")setForm((current:any)=>({...current,backdropUrl:asset.url}));else setGallery((current:{url:string;caption:string;attribution:string}[])=>current.length>=30?current:[...current,{url:asset.url,caption:asset.filename.replace(/\.[^.]+$/,""),attribution:""}]);setMessage("Image uploaded and assigned. Save the title to keep the association.");}}/>
+            {form.type==="series"&&<EpisodeEditor episodes={episodes} setEpisodes={setEpisodes} assets={mediaAssets}/>}
+            <SortablePhotoEditor label="Title gallery" description="Drag photographs to reorder; use the arrow buttons for keyboard-accessible ordering." photos={gallery} onChange={setGallery} assets={mediaAssets} emptyText="No gallery images added yet."/>
             <div className="admin-checks wide"><label><input type="checkbox" checked={form.published} onChange={event=>setForm({...form,published:event.target.checked})}/> Published</label><label><input type="checkbox" checked={form.featured} onChange={event=>setForm({...form,featured:event.target.checked})}/> Feature on home page</label></div>
+            {form.featured&&<label className="wide">Homepage feature order<input type="number" min="0" max="10000" value={form.featuredOrder} onChange={event=>setForm({...form,featuredOrder:event.target.value})}/><small>Lower numbers appear first in the homepage hero carousel.</small></label>}
             <div className="admin-actions wide"><button disabled={busy} className="button button-primary">{busy?"Saving…":"Save title"}</button><button type="button" className="button button-glass" onClick={()=>setEditing(false)}>Cancel</button></div>
           </form>}
         </div>
@@ -108,7 +105,7 @@ export function AdminDashboard({name}:{name:string}) {
         <p className="admin-notice">Poster and backdrop fields accept HTTPS image URLs or uploaded library images. Video URLs must be yours to distribute or otherwise licensed.</p>
       </>}
 
-      {tab==="cast"&&<CastStudio assetUrls={mediaUrls}/>}
+      {tab==="cast"&&<CastStudio assets={mediaAssets}/>}
       {tab==="media"&&<MediaLibrary onChanged={()=>void loadMedia()}/>}
 
       {tab==="users"&&<>
@@ -123,6 +120,33 @@ export function AdminDashboard({name}:{name:string}) {
       </>}
     </section>
   </main>;
+}
+
+function EpisodeEditor({episodes,setEpisodes,assets}:{episodes:EpisodeInput[];setEpisodes:(episodes:EpisodeInput[])=>void;assets:MediaItem[]}) {
+  function update(id:string,change:Partial<EpisodeInput>){setEpisodes(episodes.map(episode=>episode.editorId===id?{...episode,...change}:episode));}
+  function addEpisode(seasonNumber:number){const number=episodes.filter(episode=>episode.seasonNumber===seasonNumber).length+1;setEpisodes([...episodes,{editorId:nextEditorId(),title:"",seasonNumber,episodeNumber:number,synopsis:"",thumbnailUrl:"",durationMinutes:"",videoUrl:"",subtitles:[]}]);}
+  function addSeason(){const season=Math.max(0,...episodes.map(episode=>episode.seasonNumber))+1;addEpisode(season);}
+  function move(id:string,direction:-1|1){
+    const from=episodes.findIndex(episode=>episode.editorId===id);if(from<0)return;const season=episodes[from].seasonNumber,indexes=episodes.map((episode,index)=>episode.seasonNumber===season?index:-1).filter(index=>index>=0),position=indexes.indexOf(from),next=position+direction;if(next<0||next>=indexes.length)return;
+    const copy=[...episodes],to=indexes[next];[copy[from],copy[to]]=[copy[to],copy[from]];let number=0;setEpisodes(copy.map(episode=>episode.seasonNumber===season?{...episode,episodeNumber:++number}:episode));
+  }
+  function remove(id:string){const removed=episodes.find(episode=>episode.editorId===id);if(!removed)return;let number=0;setEpisodes(episodes.filter(episode=>episode.editorId!==id).map(episode=>episode.seasonNumber===removed.seasonNumber?{...episode,episodeNumber:++number}:episode));}
+  return <section className="admin-nested-editor wide" aria-label="Seasons and episodes">
+    <div className="admin-section-title"><div><h4>Seasons &amp; episodes ({episodes.length})</h4><small>Add and order real episodes. Blank video URLs stay unavailable to viewers.</small></div><div className="admin-actions"><button type="button" disabled={episodes.length>=250} onClick={()=>addEpisode(episodes[episodes.length-1]?.seasonNumber||1)}>＋ Add episode</button><button type="button" disabled={episodes.length>=250} onClick={addSeason}>＋ Add season</button></div></div>
+    {episodes.map((episode,index)=><article className="admin-episode-editor" key={episode.editorId}>
+      <div className="admin-episode-heading"><strong>Season {episode.seasonNumber} · Episode {episode.episodeNumber}</strong><div><button type="button" disabled={!episodes.some((other,i)=>i<index&&other.seasonNumber===episode.seasonNumber)} onClick={()=>move(episode.editorId,-1)} aria-label={`Move episode ${episode.episodeNumber} up`}>↑</button><button type="button" disabled={!episodes.some((other,i)=>i>index&&other.seasonNumber===episode.seasonNumber)} onClick={()=>move(episode.editorId,1)} aria-label={`Move episode ${episode.episodeNumber} down`}>↓</button><button type="button" className="row-remove" onClick={()=>remove(episode.editorId)} aria-label={`Remove episode ${episode.episodeNumber}`}>×</button></div></div>
+      <div className="admin-episode-fields"><label>Episode title<input required maxLength={160} value={episode.title} onChange={event=>update(episode.editorId,{title:event.target.value})}/></label><label>Season number<input type="number" min="1" max="30" value={episode.seasonNumber} onChange={event=>update(episode.editorId,{seasonNumber:Number(event.target.value)})}/></label><label>Episode number<input type="number" min="1" max="500" value={episode.episodeNumber} onChange={event=>update(episode.editorId,{episodeNumber:Number(event.target.value)})}/></label><label>Runtime in minutes<input type="number" min="1" max="600" value={episode.durationMinutes} onChange={event=>update(episode.editorId,{durationMinutes:event.target.value})}/></label>
+        <label className="wide">Playback URL<input type="url" value={episode.videoUrl} onChange={event=>update(episode.editorId,{videoUrl:event.target.value})} placeholder="https://…"/></label>
+        <label className="wide">Thumbnail URL<input type="url" value={episode.thumbnailUrl} onChange={event=>update(episode.editorId,{thumbnailUrl:event.target.value})} placeholder="https://…"/>{!!assets.length&&<select aria-label={`Choose thumbnail for episode ${episode.episodeNumber}`} value={assets.some(asset=>asset.url===episode.thumbnailUrl)?episode.thumbnailUrl:""} onChange={event=>update(episode.editorId,{thumbnailUrl:event.target.value})}><option value="">Choose from media library…</option>{assets.map(asset=><option key={asset.id} value={asset.url}>{asset.filename} · {asset.role}</option>)}</select>}<small>Upload an image in Media Library with the Episode thumbnail role, then select it here.</small></label>
+        <label className="wide">Episode description<textarea maxLength={1000} value={episode.synopsis} onChange={event=>update(episode.editorId,{synopsis:event.target.value})}/></label>
+      </div>
+      <div className="admin-subtitle-editor"><div className="admin-section-title"><div><strong>Subtitles</strong><small>Tracks are stored with this episode.</small></div><button type="button" disabled={episode.subtitles.length>=20} onClick={()=>update(episode.editorId,{subtitles:[...episode.subtitles,{language:"",label:"",fileUrl:"",kind:"subtitles"}]})}>＋ Add track</button></div>
+        {episode.subtitles.map((track,trackIndex)=><div className="admin-subtitle-row" key={trackIndex}><label>Language<input required maxLength={30} value={track.language} onChange={event=>update(episode.editorId,{subtitles:episode.subtitles.map((item,i)=>i===trackIndex?{...item,language:event.target.value}:item)})}/></label><label>Label<input required maxLength={80} value={track.label} onChange={event=>update(episode.editorId,{subtitles:episode.subtitles.map((item,i)=>i===trackIndex?{...item,label:event.target.value}:item)})}/></label><label>Track URL<input required type="url" value={track.fileUrl} onChange={event=>update(episode.editorId,{subtitles:episode.subtitles.map((item,i)=>i===trackIndex?{...item,fileUrl:event.target.value}:item)})}/></label><label>Type<select value={track.kind} onChange={event=>update(episode.editorId,{subtitles:episode.subtitles.map((item,i)=>i===trackIndex?{...item,kind:event.target.value as SubtitleInput["kind"]}:item)})}><option value="subtitles">Subtitles</option><option value="captions">Captions</option></select></label><button type="button" className="row-remove" aria-label={`Remove subtitle track ${trackIndex+1}`} onClick={()=>update(episode.editorId,{subtitles:episode.subtitles.filter((_,i)=>i!==trackIndex)})}>×</button></div>)}
+        {!episode.subtitles.length&&<p className="admin-muted">No subtitle tracks added.</p>}
+      </div>
+    </article>)}
+    {!episodes.length&&<p className="admin-muted">No episodes yet. Add the first episode or a new season.</p>}
+  </section>;
 }
 
 function AdminTitleTable({items,onEdit,onDelete}:{items:any[];onEdit:(item:any)=>void;onDelete:(item:any)=>void}) {

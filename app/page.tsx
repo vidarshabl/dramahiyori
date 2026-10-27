@@ -6,9 +6,8 @@ import {moods} from "@/lib/demo-data";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export default async function HomePage(){
- const all=await listTitles({limit:"48"});
- const featured=all.filter(t=>t.featured===1).slice(0,3);
- const heroItems=[...featured,...all.filter(t=>!featured.some(f=>f.id===t.id))].slice(0,3);
+ const [all,featured]=await Promise.all([listTitles({limit:"48"}),listTitles({limit:"3",sort:"featured"})]);
+ const heroItems=featured.length?featured:all.slice(0,1);
  const [popular,romance,comedy,newest,ongoing,completed,movies]=await Promise.all([listTitles({sort:"popular"}),listTitles({genre:"Romance"}),listTitles({genre:"Comedy"}),listTitles({sort:"newest"}),listTitles({type:"series",status:"ongoing"}),listTitles({type:"series",status:"completed"}),listTitles({type:"movie"})]);
  return <main>
   <FeaturedHero items={heroItems.length?heroItems:all.slice(0,3)}/>

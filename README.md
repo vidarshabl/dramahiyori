@@ -44,14 +44,14 @@ The command stores only a salted scrypt password hash. Keep the password in a pa
 
 ## What is implemented
 
-- Cinematic, responsive home page with featured stories, recent catalog additions, genre rails, mood navigation, and a viewing-activity popularity rail when viewing data exists.
+- Cinematic, responsive home page with administrator-ordered featured stories, recent catalog additions, genre rails, mood navigation, and a viewing-activity popularity rail when viewing data exists.
 - Search by title or alternative title; genre, country, year, movie/series, completion, and sort filters; debounced requests, shareable query parameters, suggestions, and incremental loading.
 - Database-backed title details, seasons and episode navigation, sample labels, related titles, subtitles, and an unavailable-stream state.
 - Public registration, login, logout, profile changes, password changes, account deletion, 30-day HttpOnly same-site sessions, scrypt password hashing, same-origin checks on mutations, and database-backed login throttling.
 - Watchlist and playback-progress persistence for signed-in users.
 - An independent administrator login and server-protected dashboard with database-backed metrics, content create/edit/publish/draft/delete, genre tagging, episode ordering and seasons, subtitle URLs, basic account search/disable, site settings, and audit entries.
-- Cast and crew profiles with biographies, portraits, title credits, filmographies, and attributed photo galleries. Title detail pages include accessible image galleries with keyboard and touch controls.
-- An administrator media library that accepts real JPEG, PNG, WebP, GIF, and AVIF images up to 4 MB, stores them in public Vercel Blob, and records their URLs in Turso. Library images can be selected in title, cast, and gallery image fields.
+- Cast and crew profiles with biographies, portraits, title credits, filmographies, and attributed photo galleries, plus a public searchable cast directory filtered to profiles connected to published titles. Title detail pages include accessible image galleries with keyboard and touch controls.
+- A batch administrator media uploader with drag and drop, per-file progress, retries, cancellation, previews, and image-role assignment. Validated JPEG, PNG, WebP, GIF, and AVIF images up to 4 MB are stored in public Vercel Blob and registered in Turso. Gallery ordering, title/cast/episode image associations, dimensions, and captions are managed in the dashboard; uploaded library images can be reused in editors.
 - HTML5 playback controls and HLS playback through hls.js where Media Source Extensions are available, plus native HLS fallback. An unconfigured source never pretends to play.
 - Responsive layouts, keyboard focus styles, reduced-motion support, basic metadata, sitemap, robots rules, and security headers.
 
@@ -90,7 +90,7 @@ npm run test:e2e
 
 The suite exercises role separation, unauthorized admin requests, title and cast profile creation, title galleries, media-related routes, search and genre filtering, watchlist persistence, progress validation and storage, and audit logging. Use a disposable test database; remove it after testing. A Vercel Blob store is required to exercise actual image uploads; that external transfer is not covered by the local database integration suite.
 
-To verify that an existing database with migration 001 upgrades to the current schema without losing its title, run:
+The migration test verifies that a disposable database at migration 001 upgrades through cast profiles, galleries, media assets, media-to-content associations, and featured ordering while retaining its title and serving the current queries:
 
 ~~~sh
 npm run test:migrations

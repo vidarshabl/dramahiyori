@@ -3,6 +3,7 @@ import { currentAdmin } from "@/lib/auth";
 import { badRequest, json, readJson, sameOriginOrReject } from "@/lib/api";
 import { database, type DatabaseAdapter } from "@/lib/db";
 import { isAllowedMediaUrl } from "@/lib/security";
+import { recordCastImageUsages } from "@/lib/media-usage";
 
 export const runtime="nodejs";
 
@@ -83,6 +84,7 @@ export async function POST(request:Request) {
     await database.transaction(async tx=>{
       await tx.prepare("INSERT INTO cast_members(id,slug,name,biography,nationality,profession,portrait_url) VALUES(?,?,?,?,?,?,?)").run(id,data.slug,data.name,data.biography,data.nationality,data.profession,data.portraitUrl);
       await writeGallery(tx,id,data.gallery);await writeCredits(tx,id,data.credits);
+      await recordCastImageUsages(tx,id,{portraitUrl:data.portraitUrl,gallery:data.gallery});
       await tx.prepare("INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)").run(admin.id,"cast.create","cast_member",id,JSON.stringify({name:data.name}));
     });
     return json({id,slug:data.slug},201);
@@ -101,6 +103,7 @@ export async function PUT(request:Request) {
       const result=await tx.prepare("UPDATE cast_members SET slug=?,name=?,biography=?,nationality=?,profession=?,portrait_url=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(data.slug,data.name,data.biography,data.nationality,data.profession,data.portraitUrl,body.id);
       if(!Number(result.changes))return false;
       await writeGallery(tx,body.id as string,data.gallery);await writeCredits(tx,body.id as string,data.credits);
+      await recordCastImageUsages(tx,body.id as string,{portraitUrl:data.portraitUrl,gallery:data.gallery});
       await tx.prepare("INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)").run(admin.id,"cast.update","cast_member",body.id,JSON.stringify({name:data.name}));
       return true;
     });

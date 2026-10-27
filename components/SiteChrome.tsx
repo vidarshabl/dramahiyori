@@ -11,8 +11,8 @@ export function SiteHeader() {
   const [currentSearch,setCurrentSearch]=useState("");
   const [brand,setBrand]=useState("DearDrama"),[tagline,setTagline]=useState("stories that stay");
   const pathname=usePathname(), router=useRouter();
-  const navLinks=[{href:"/",label:"Home"},{href:"/browse?type=series",label:"K-Dramas"},{href:"/browse?type=movie",label:"Movies"},{href:"/browse?status=ongoing",label:"Ongoing"},{href:"/genres",label:"Genres"},{href:"/new",label:"New releases"}];
-  const mobileLinks=[{href:"/",label:"Home"},{href:"/browse?type=series",label:"K-Dramas"},{href:"/browse?type=movie",label:"Movies"},{href:"/genres",label:"Genres & moods"},{href:"/new",label:"New releases"},{href:"/watchlist",label:"My watchlist"}];
+  const navLinks=[{href:"/",label:"Home"},{href:"/browse?type=series",label:"K-Dramas"},{href:"/browse?type=movie",label:"Movies"},{href:"/browse?status=ongoing",label:"Ongoing"},{href:"/genres",label:"Genres"},{href:"/people",label:"Cast & crew"},{href:"/new",label:"New releases"}];
+  const mobileLinks=[{href:"/",label:"Home"},{href:"/browse?type=series",label:"K-Dramas"},{href:"/browse?type=movie",label:"Movies"},{href:"/genres",label:"Genres & moods"},{href:"/people",label:"Cast & crew"},{href:"/new",label:"New releases"},{href:"/watchlist",label:"My watchlist"}];
   function isActive(href:string){const [path,queryString=""]=href.split("?");if(pathname!==path)return false;if(!queryString)return true;const active=new URLSearchParams(currentSearch);return Array.from(new URLSearchParams(queryString)).every(([key,value])=>active.get(key)===value);}
   useEffect(()=>{fetch("/api/auth/me").then(r=>r.json()).then(d=>setUser(d.user)).catch(()=>{});},[pathname]);
   useEffect(()=>{fetch("/api/settings").then(r=>r.json()).then(d=>{if(d.settings?.brand)setBrand(d.settings.brand);if(d.settings?.tagline)setTagline(d.settings.tagline);}).catch(()=>{});},[]);

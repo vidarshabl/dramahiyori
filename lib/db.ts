@@ -105,7 +105,7 @@ class LocalProvider implements Provider {
   }
 }
 
-const MIGRATIONS = ["001_initial", "002_cast_gallery_media"] as const;
+const MIGRATIONS = ["001_initial", "002_cast_gallery_media", "003_media_associations", "004_featured_order"] as const;
 
 function migrationSql(migration: typeof MIGRATIONS[number]): string {
   const file = path.join(process.cwd(), "db", "migrations", `${migration}.sql`);
@@ -293,24 +293,26 @@ export async function seedDemoData(): Promise<void> {
 export type Title = {
   id:string; type:"movie"|"series"; slug:string; title:string; alternative_title:string; synopsis:string; release_year:number|null;
   country:string; status:"ongoing"|"completed"|"upcoming"; runtime_minutes:number|null; poster_url:string; backdrop_url:string;
-  content_rating:string; subtitle_languages:string; video_url:string; published:number; featured:number; demo:number;
+  content_rating:string; subtitle_languages:string; video_url:string; published:number; featured:number; featured_order:number; demo:number;
   genres?:string[]; episode_count?:number; season_count?:number; has_playable_source?:number; first_playable_episode_id?:string|null;
 };
 
 export type GalleryImage = {id:string;image_url:string;caption:string;attribution:string;sort_order:number};
 export type CastCredit = {id:string;cast_member_id:string;slug:string;name:string;portrait_url:string;character_name:string;role_type:"cast"|"director"|"writer"|"producer";sort_order:number};
 export type CastMember = {id:string;slug:string;name:string;biography:string;nationality:string;profession:string;portrait_url:string;created_at:string;updated_at:string;gallery?:GalleryImage[];credits?:Array<CastCredit & {title_id:string;title_slug:string;title:string;title_type:"movie"|"series";release_year:number|null;poster_url:string}>};
+export type CastDirectoryItem = Pick<CastMember,"id"|"slug"|"name"|"profession"|"nationality"|"portrait_url"> & { title_count:number; known_for:string|null };
 
 export async function listTitles(filters: Record<string,string|undefined> = {}): Promise<Title[]> {
   const where = ["t.published=1"];
   const params: (string|number)[] = [];
+  if (filters.sort === "featured") where.push("t.featured=1");
   for (const [key,column] of [["type","t.type"],["country","t.country"],["status","t.status"],["year","t.release_year"]] as const) {
     if (filters[key]) { where.push(`${column}=?`); params.push(key === "year" ? Number(filters[key]) : filters[key]!); }
   }
   if (filters.genre) { where.push("EXISTS (SELECT 1 FROM title_genres tg JOIN genres g ON g.id=tg.genre_id WHERE tg.title_id=t.id AND (g.slug=? OR lower(g.name)=lower(?)))"); params.push(slugify(filters.genre),filters.genre); }
   if (filters.q?.trim()) { where.push("(lower(t.title) LIKE ? OR lower(t.alternative_title) LIKE ?)"); const query = `%${filters.q.trim().toLowerCase()}%`; params.push(query,query); }
   if (filters.sort === "popular") where.push("EXISTS (SELECT 1 FROM viewing_history vh WHERE vh.title_id=t.id AND vh.viewed_at>=datetime('now','-30 days'))");
-  const sort = filters.sort === "alpha" ? "t.title COLLATE NOCASE ASC" : filters.sort === "oldest" ? "t.release_year ASC,t.title" : filters.sort === "popular" ? "(SELECT COUNT(*) FROM viewing_history vh WHERE vh.title_id=t.id AND vh.viewed_at>=datetime('now','-30 days')) DESC,t.title" : "t.created_at DESC,t.title";
+  const sort = filters.sort === "alpha" ? "t.title COLLATE NOCASE ASC" : filters.sort === "oldest" ? "t.release_year ASC,t.title" : filters.sort === "popular" ? "(SELECT COUNT(*) FROM viewing_history vh WHERE vh.title_id=t.id AND vh.viewed_at>=datetime('now','-30 days')) DESC,t.title" : filters.sort === "featured" ? "t.featured_order ASC,t.updated_at DESC,t.title" : "t.created_at DESC,t.title";
   const page = Math.max(1,Number(filters.page || 1)); const limit = Math.min(48,Math.max(1,Number(filters.limit || 24)));
   const rows = await database.prepare(`SELECT t.*, (SELECT COUNT(*) FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE s.title_id=t.id) AS episode_count,
     (SELECT COUNT(*) FROM seasons s WHERE s.title_id=t.id) AS season_count,
@@ -352,6 +354,24 @@ export async function getCastMember(slug:string):Promise<CastMember|null> {
     database.prepare("SELECT tc.id,tc.cast_member_id,tc.character_name,tc.role_type,tc.sort_order,t.id AS title_id,t.slug AS title_slug,t.title,t.type AS title_type,t.release_year,t.poster_url FROM title_cast tc JOIN titles t ON t.id=tc.title_id WHERE tc.cast_member_id=? AND t.published=1 ORDER BY tc.sort_order,t.release_year DESC,t.title COLLATE NOCASE").all(member.id) as Promise<CastMember["credits"]>,
   ]);
   return {...member,gallery:galleryRows.map(image=>({...image})),credits:credits||[]};
+}
+
+export async function listCastMembers({query="",profession=""}:{query?:string;profession?:string}={}):Promise<CastDirectoryItem[]> {
+  const term=query.trim().toLowerCase();
+  const pattern="%"+term.replace(/[\\%_]/g,"\\$&")+"%";
+  return await database.prepare(`SELECT cm.id,cm.slug,cm.name,cm.profession,cm.nationality,cm.portrait_url,
+    (SELECT COUNT(DISTINCT tc.title_id) FROM title_cast tc JOIN titles t ON t.id=tc.title_id WHERE tc.cast_member_id=cm.id AND t.published=1) AS title_count,
+    (SELECT t.title FROM title_cast tc JOIN titles t ON t.id=tc.title_id WHERE tc.cast_member_id=cm.id AND t.published=1 ORDER BY tc.sort_order,t.release_year DESC,t.title COLLATE NOCASE LIMIT 1) AS known_for
+    FROM cast_members cm WHERE EXISTS (SELECT 1 FROM title_cast tc JOIN titles t ON t.id=tc.title_id WHERE tc.cast_member_id=cm.id AND t.published=1)
+    AND (?='' OR lower(cm.name) LIKE ? ESCAPE '\\' OR lower(cm.profession) LIKE ? ESCAPE '\\')
+    AND (?='' OR lower(cm.profession)=lower(?)) ORDER BY cm.name COLLATE NOCASE LIMIT 200`).all(term,pattern,pattern,profession,profession) as CastDirectoryItem[];
+}
+
+export async function listCastProfessions():Promise<string[]> {
+  const rows=await database.prepare(`SELECT DISTINCT cm.profession FROM cast_members cm WHERE trim(cm.profession)<>''
+    AND EXISTS (SELECT 1 FROM title_cast tc JOIN titles t ON t.id=tc.title_id WHERE tc.cast_member_id=cm.id AND t.published=1)
+    ORDER BY cm.profession COLLATE NOCASE`).all() as Array<{profession:string}>;
+  return rows.map(row=>row.profession);
 }
 
 export async function getUserByEmail(email:string) { return await database.prepare("SELECT * FROM users WHERE email=?").get(email.toLowerCase()) as Record<string,any>|undefined; }
