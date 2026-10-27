@@ -42,7 +42,7 @@ export function BatchImageUploader({onUploaded,maxBytes=4*1024*1024,roles=DEFAUL
     return new Promise(resolve=>{
       update(item.id,{status:"uploading",progress:0,error:""});
       const request=new XMLHttpRequest();requests.current.set(item.id,request);
-      request.open("POST","/api/admin/media");request.responseType="text";
+      request.open("POST","/api/admin/media");request.responseType="text";request.timeout=60000;
       let lastProgress=0;request.upload.onprogress=event=>{if(event.lengthComputable){const progress=Math.min(99,Math.round(event.loaded/event.total*100));if(progress-lastProgress>=4||progress===99){lastProgress=progress;update(item.id,{progress});}}};
       request.onload=()=>{
         requests.current.delete(item.id);
@@ -54,6 +54,7 @@ export function BatchImageUploader({onUploaded,maxBytes=4*1024*1024,roles=DEFAUL
         resolve();
       };
       request.onerror=()=>{requests.current.delete(item.id);update(item.id,{status:"failed",error:"Network error. Check the connection and retry this image."});resolve();};
+      request.ontimeout=()=>{requests.current.delete(item.id);update(item.id,{status:"failed",error:"Upload took too long. Check your connection and retry this image."});resolve();};
       request.onabort=()=>{requests.current.delete(item.id);update(item.id,{status:"cancelled",error:"Transfer interrupted. If it had already completed, check the media library before retrying."});resolve();};
       const body=new FormData();body.set("file",item.file);body.set("role",item.role);body.set("uploadId",item.id);
       try{request.send(body);}catch{requests.current.delete(item.id);update(item.id,{status:"failed",error:"The upload could not be started. Retry this image."});resolve();}

@@ -15,32 +15,34 @@ function getBackdropPreview(value:string):string|null {
 }
 
 export function HomePhotoEditor({titles,assets,storageConfigured,onSaved,onAssetsChanged,onAddTitle}:{titles:HomeTitle[];assets:HomeAsset[];storageConfigured:boolean|null;onSaved:()=>Promise<void>;onAssetsChanged:()=>Promise<void>;onAddTitle:()=>void}) {
-  const [slides,setSlides]=useState<HomeSlide[]>([]),[selectedTitle,setSelectedTitle]=useState(""),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[message,setMessage]=useState(""),[error,setError]=useState("");
+  const [slides,setSlides]=useState<HomeSlide[]>([]),[selectedTitle,setSelectedTitle]=useState(""),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[ready,setReady]=useState(false),[message,setMessage]=useState(""),[error,setError]=useState("");
   const savedSnapshot=useRef(""),dragging=useRef<number|null>(null);
 
   useEffect(()=>{
     let active=true;
     void (async()=>{
+      const controller=new AbortController();
+      const timeout=window.setTimeout(()=>controller.abort(),20000);
       try {
-        const response=await fetch("/api/admin/home-slides");
+        const response=await fetch("/api/admin/home-slides",{signal:controller.signal});
         const data=await response.json();
         if(!response.ok)throw new Error(data.error||"Homepage photos could not be loaded.");
         if(!active)return;
         const initial=(data.items||[]).map((item:{slide_id:string;id:string;title:string;slug:string;backdrop_url:string})=>({id:item.slide_id,titleId:item.id,title:item.title,slug:item.slug,backdropUrl:item.backdrop_url||""}));
-        savedSnapshot.current=JSON.stringify(initial);setSlides(initial);
+        savedSnapshot.current=JSON.stringify(initial);setSlides(initial);setReady(true);
       } catch(reason) {
-        if(active)setError(reason instanceof Error?reason.message:"Homepage photos could not be loaded.");
-      } finally {if(active)setLoading(false);}
+        if(active)setError(controller.signal.aborted?"Loading the slideshow took too long. Refresh this page and try again.":reason instanceof Error?reason.message:"Homepage photos could not be loaded.");
+      } finally {window.clearTimeout(timeout);if(active)setLoading(false);}
     })();
     return()=>{active=false;};
   },[]);
 
-  const dirty=!loading&&JSON.stringify(slides)!==savedSnapshot.current;
+  const dirty=ready&&JSON.stringify(slides)!==savedSnapshot.current;
   const publishedTitles=titles.filter(title=>Number(title.published)===1);
 
   function addSlide() {
     const title=titles.find(item=>item.id===selectedTitle&&Number(item.published)===1);
-    if(!title||slides.length>=MAX_SLIDES)return;
+    if(!ready||!title||slides.length>=MAX_SLIDES)return;
     setSlides(current=>[...current,{id:crypto.randomUUID(),titleId:title.id,title:title.title,slug:title.slug,backdropUrl:""}]);
     setSelectedTitle("");setError("");setMessage("");
   }
@@ -57,31 +59,38 @@ export function HomePhotoEditor({titles,assets,storageConfigured,onSaved,onAsset
     const missing=slides.findIndex(slide=>!getBackdropPreview(slide.backdropUrl));
     if(missing!==-1){setError(`Choose a valid HTTPS photo for slide ${missing+1} before saving.`);return;}
     setBusy(true);setError("");setMessage("");
+    const controller=new AbortController();
+    const timeout=window.setTimeout(()=>controller.abort(),30000);
+    let saved=false;
     try {
-      const response=await fetch("/api/admin/home-slides",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({slides:slides.map(({id,titleId,backdropUrl})=>({id,titleId,backdropUrl}))})});
+      const response=await fetch("/api/admin/home-slides",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({slides:slides.map(({id,titleId,backdropUrl})=>({id,titleId,backdropUrl}))}),signal:controller.signal});
       const data=await response.json();if(!response.ok)throw new Error(data.error||"Homepage photos could not be saved.");
       savedSnapshot.current=JSON.stringify(slides);
       setMessage("Homepage photos saved. The public hero will rotate through these images.");
-      try {await onSaved();} catch {setMessage("Homepage photos saved. Reload the dashboard to refresh the title list.");}
-    } catch(reason) {setError(reason instanceof Error?reason.message:"Homepage photos could not be saved. Please try again.");}
-    finally {setBusy(false);}
+      saved=true;
+    } catch(reason) {setError(controller.signal.aborted?"Saving took too long. Check your connection, then try again.":reason instanceof Error?reason.message:"Homepage photos could not be saved. Please try again.");}
+    finally {window.clearTimeout(timeout);setBusy(false);}
+    if(saved)void onSaved().catch(()=>setMessage("Homepage photos saved. Reload the dashboard to refresh the title list."));
   }
 
   return <>
     <div className="admin-page-intro"><h2>Home photo editor</h2><p>Add multiple homepage photos, choose which published drama each photo opens, and set their display order.</p></div>
     <section className="admin-section home-editor-section">
-      <div className="admin-section-title"><div><h3>Hero slideshow <span className="home-slide-count">{slides.length} / {MAX_SLIDES}</span></h3><small>Photos can repeat a title. Drag to reorder, or use the arrow buttons. Removing a photo does not delete its title or media file.</small></div><button type="button" className="button button-primary" disabled={busy||loading||!dirty} onClick={()=>void saveSlides()}>{busy?"Saving…":"Save slideshow"}</button></div>
+      <div className="admin-section-title"><div><h3>Hero slideshow <span className="home-slide-count">{slides.length} / {MAX_SLIDES}</span></h3><small>Photos can repeat a title. Drag to reorder, or use the arrow buttons. Removing a photo does not delete its title or media file.</small></div><button type="button" className="button button-primary" disabled={busy||loading||!ready||!dirty} onClick={()=>void saveSlides()}>{loading?"Loading…":!ready?"Unavailable":busy?"Saving…":"Save slideshow"}</button></div>
+      {!loading&&!ready&&<p className="admin-notice" role="status">The saved slideshow could not be loaded. Refresh this page before making changes.</p>}
+      {ready&&!slides.length&&<p className="admin-notice" role="status">Upload your photos above, add at least one photo below, and choose its title and image. Then Save slideshow will become available.</p>}
+      {ready&&!!slides.length&&!dirty&&!busy&&<p className="admin-notice" role="status">There are no unsaved changes. Add or edit a photo to enable Save slideshow.</p>}
       {message&&<p className="admin-message" role="status">{message}</p>}{error&&<p className="admin-message admin-error" role="alert">{error}</p>}
 
       <BatchImageUploader title="Upload home photos" description="Upload several wide hero images at once, then assign each photo to a slide below." roles={[{value:"backdrop",label:"Homepage photo"}]} storageConfigured={storageConfigured} onUploaded={(_item)=>{setMessage("Photo uploaded. Add a slide and choose it from the media list.");void onAssetsChanged().catch(()=>setError("Photo uploaded, but the media library could not be refreshed."));}}/>
 
       <div className="home-slide-add-row">
-        <label>Add a photo for a published title<select value={selectedTitle} onChange={event=>setSelectedTitle(event.target.value)} disabled={!publishedTitles.length||slides.length>=MAX_SLIDES}><option value="">Choose a title for this photo…</option>{publishedTitles.map(title=><option key={title.id} value={title.id}>{title.title}</option>)}</select></label>
-        <button type="button" className="button button-glass" onClick={addSlide} disabled={!selectedTitle||slides.length>=MAX_SLIDES}>＋ Add photo</button>
+        <label>Add a photo for a published title<select value={selectedTitle} onChange={event=>setSelectedTitle(event.target.value)} disabled={!ready||!publishedTitles.length||slides.length>=MAX_SLIDES}><option value="">Choose a title for this photo…</option>{publishedTitles.map(title=><option key={title.id} value={title.id}>{title.title}</option>)}</select></label>
+        <button type="button" className="button button-glass" onClick={addSlide} disabled={!ready||!selectedTitle||slides.length>=MAX_SLIDES}>＋ Add photo</button>
         {!publishedTitles.length&&<button type="button" className="text-link" onClick={onAddTitle}>Publish a title first →</button>}
       </div>
 
-      {loading?<p className="admin-notice" role="status">Loading homepage photos…</p>:slides.length?<ol className="home-slide-list" aria-label="Homepage hero photos">{slides.map((slide,index)=>{
+      {loading?<p className="admin-notice" role="status">Loading homepage photos…</p>:!ready?<p className="admin-notice" role="status">Refresh this page to retry loading the saved photos.</p>:slides.length?<ol className="home-slide-list" aria-label="Homepage hero photos">{slides.map((slide,index)=>{
         const preview=getBackdropPreview(slide.backdropUrl);
         return <li key={slide.id} className="home-slide-card" onDragOver={event=>{if(dragging.current!==null)event.preventDefault();}} onDrop={event=>{event.preventDefault();const from=dragging.current;dragging.current=null;if(from!==null)moveSlide(from,index);}}>
           <div className="home-slide-preview">{preview?<RemoteImage src={preview} alt={`${slide.title} homepage photo`} sizes="(max-width: 650px) 100vw, 420px" fallbackLabel="Photo unavailable"/>:<div className="home-slide-placeholder"><span aria-hidden="true">✦</span><small>Choose or upload a photo</small></div>}<span className="home-slide-number">{String(index+1).padStart(2,"0")}</span></div>
@@ -93,7 +102,7 @@ export function HomePhotoEditor({titles,assets,storageConfigured,onSaved,onAsset
         </li>;
       })}</ol>:<div className="home-editor-empty"><span aria-hidden="true">✦</span><h4>Your slideshow is ready for its first photo.</h4><p>Add a published title, upload one or more photos, assign each photo to a title, then save. The homepage will rotate through them with the existing cinematic transition.</p></div>}
       <datalist id="home-media-urls">{assets.map(asset=><option key={asset.id} value={asset.url}>{asset.filename}</option>)}</datalist>
-      {!!slides.length&&<div className="home-editor-footer"><span>{dirty?"You have unsaved slideshow changes.":"Your saved homepage slideshow is up to date."}</span><button type="button" className="button button-primary" disabled={busy||loading||!dirty} onClick={()=>void saveSlides()}>{busy?"Saving…":"Save slideshow"}</button></div>}
+      {!!slides.length&&<div className="home-editor-footer"><span>{dirty?"You have unsaved slideshow changes.":"Your saved homepage slideshow is up to date."}</span><button type="button" className="button button-primary" disabled={busy||loading||!ready||!dirty} onClick={()=>void saveSlides()}>{loading?"Loading…":busy?"Saving…":"Save slideshow"}</button></div>}
     </section>
   </>;
 }
