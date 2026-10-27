@@ -3,6 +3,13 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "archive.org", pathname: "/**" },
+      { protocol: "https", hostname: "**.archive.org", pathname: "/**" },
+      { protocol: "https", hostname: "*.us.archive.org", pathname: "/**" },
+    ],
+  },
   outputFileTracingIncludes: { "/*": ["./db/migrations/*.sql"] },
   experimental: { cpus: 1 },
   async headers() {

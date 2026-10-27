@@ -1,15 +1,20 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { database } from "./db.ts";
 
+const SCRYPT_KEY_BYTES = 64;
+const SCRYPT_OPTIONS = {N:32768,r:8,p:1,maxmem:64*1024*1024};
+
 export function hashPassword(password:string) {
   const salt = randomBytes(16).toString("hex");
-  const hash = scryptSync(password,salt,64,{N:32768,r:8,p:1,maxmem:64*1024*1024}).toString("hex");
+  const hash = scryptSync(password,salt,SCRYPT_KEY_BYTES,SCRYPT_OPTIONS).toString("hex");
   return `scrypt$${salt}$${hash}`;
 }
 export function verifyPassword(password:string, encoded:string) {
-  const [algorithm,salt,hash] = encoded.split("$");
-  if (algorithm !== "scrypt" || !salt || !hash) return false;
-  const actual = scryptSync(password,salt,64,{N:32768,r:8,p:1,maxmem:64*1024*1024});
+  const parts=encoded.split("$");
+  if(parts.length!==3)return false;
+  const [algorithm,salt,hash] = parts;
+  if (algorithm !== "scrypt" || !salt || !/^[a-f\d]{32}$/i.test(salt) || !/^[a-f\d]{128}$/i.test(hash || "")) return false;
+  const actual = scryptSync(password,salt,SCRYPT_KEY_BYTES,SCRYPT_OPTIONS);
   const expected = Buffer.from(hash,"hex");
   return expected.length === actual.length && timingSafeEqual(actual,expected);
 }
@@ -22,8 +27,19 @@ export function isAllowedMediaUrl(value:string) {
     const url = new URL(value);
     if (url.protocol !== "https:" && url.protocol !== "http:") return false;
     if (process.env.NODE_ENV === "production" && url.protocol !== "https:") return false;
+    const host=url.hostname.toLowerCase();
     const allowed = (process.env.MEDIA_ALLOWED_HOSTS || "").split(",").map(x=>x.trim().toLowerCase()).filter(Boolean);
-    return allowed.length === 0 || allowed.includes(url.hostname.toLowerCase());
+    const internetArchiveHost=host==="archive.org"||host.endsWith(".archive.org");
+    return internetArchiveHost || allowed.length === 0 || allowed.includes(host);
+  } catch { return false; }
+}
+
+export function isValidMediaUrl(value:string) {
+  if (!value) return true;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+    return process.env.NODE_ENV !== "production" || url.protocol === "https:";
   } catch { return false; }
 }
 

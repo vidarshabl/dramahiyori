@@ -13,6 +13,7 @@
     "test:e2e": "node --test tests/e2e.test.mjs"
   },
   "dependencies": {
+    "@next/env": "15.5.9",
     "@libsql/client": "^0.18.0",
     "hls.js": "^1.7.3",
     "next": "15.5.9",

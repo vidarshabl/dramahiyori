@@ -40,11 +40,11 @@ test("public and admin authentication remain separate",async()=>{
 
 test("admin creates and edits content; title and genre filters use saved data",async()=>{
  slug="test-title-"+randomUUID().slice(0,8);
- const body={title:"Test Spring Letters",type:"series",slug,synopsis:"A test record for CRUD verification.",releaseYear:2026,country:"South Korea",status:"ongoing",genres:["Romance","Test Genre"],published:true,featured:false,episodes:[{title:"Pilot",synopsis:"Test episode.",durationMinutes:28,videoUrl:""}]};
+ const body={title:"Test Spring Letters",type:"series",slug,synopsis:"A test record for CRUD verification.",releaseYear:2026,country:"South Korea",status:"ongoing",genres:["Romance","Test Genre"],published:true,featured:false,videoUrl:"https://ia800.us.archive.org/download/test/video.mp4",episodes:[{title:"Pilot",synopsis:"Test episode.",durationMinutes:28,videoUrl:"https://ia800.us.archive.org/download/test/episode.mp4"}]};
  const created=await request("/api/admin/titles",{method:"POST",cookie:adminCookie,body});assert.equal(created.response.status,201,JSON.stringify(created.data));titleId=created.data.id;
  const lookup=await request("/api/titles?q="+encodeURIComponent("Test Spring"));assert.equal(lookup.data.items[0].id,titleId);
  const genre=await request("/api/titles?genre="+encodeURIComponent("Test Genre"));assert.ok(genre.data.items.some(item=>item.id===titleId));
- const adminTitles=await request("/api/admin/titles",{cookie:adminCookie});const saved=adminTitles.data.items.find(x=>x.id===titleId);assert.ok(saved);episodeId=saved.episodes[0].id;
+ const adminTitles=await request("/api/admin/titles",{cookie:adminCookie});const saved=adminTitles.data.items.find(x=>x.id===titleId);assert.ok(saved);assert.equal(saved.video_url,body.videoUrl);assert.equal(saved.episodes[0].video_url,body.episodes[0].videoUrl);episodeId=saved.episodes[0].id;
  const edited=await request("/api/admin/titles",{method:"PUT",cookie:adminCookie,body:{...body,id:titleId,title:"Test Spring Letters — edited",status:"completed",episodes:body.episodes}});
  assert.equal(edited.response.status,200,JSON.stringify(edited.data));
  const refreshed=await request("/api/admin/titles",{cookie:adminCookie});episodeId=refreshed.data.items.find(x=>x.id===titleId).episodes[0].id;

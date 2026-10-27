@@ -119,6 +119,28 @@ function resolveRemoteSetting(primaryName: string, alternateName: string): strin
   return primary || alternate || undefined;
 }
 
+export function getDatabaseConfigurationSummary() {
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  const tursoUrl = process.env.TURSO_DATABASE_URL?.trim();
+  const databaseToken = process.env.DATABASE_TOKEN?.trim();
+  const tursoToken = process.env.TURSO_AUTH_TOKEN?.trim();
+  const configuredUrl = databaseUrl || tursoUrl;
+  let urlProtocol = "unset";
+  if(configuredUrl) {
+    try { urlProtocol=new URL(configuredUrl).protocol; } catch { urlProtocol="invalid"; }
+  }
+
+  return {
+    provider: !configuredUrl ? process.env.NODE_ENV === "development" ? "local-development" : "unconfigured" : urlProtocol === "libsql:" ? "turso" : "invalid-remote-url",
+    urlProtocol,
+    urlVariable: databaseUrl ? "DATABASE_URL" : tursoUrl ? "TURSO_DATABASE_URL" : "unset",
+    tokenVariable: databaseToken ? "DATABASE_TOKEN" : tursoToken ? "TURSO_AUTH_TOKEN" : "unset",
+    tokenConfigured: Boolean(databaseToken || tursoToken),
+    conflictingUrlAliases: Boolean(databaseUrl && tursoUrl && databaseUrl !== tursoUrl),
+    conflictingTokenAliases: Boolean(databaseToken && tursoToken && databaseToken !== tursoToken),
+  } as const;
+}
+
 async function createRemoteProvider(urlValue: string, token: string): Promise<Provider> {
   let url: URL;
   try {

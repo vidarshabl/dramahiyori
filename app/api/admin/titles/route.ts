@@ -1,7 +1,7 @@
 import { currentAdmin } from "@/lib/auth";
 import { badRequest, json, readJson, sameOriginOrReject } from "@/lib/api";
 import { database, type DatabaseAdapter } from "@/lib/db";
-import { isAllowedMediaUrl } from "@/lib/security";
+import { isAllowedMediaUrl, isValidMediaUrl } from "@/lib/security";
 import { randomUUID } from "node:crypto";
 
 export const runtime="nodejs";
@@ -17,7 +17,7 @@ function validTitle(body:Record<string,unknown>) {
   const genres=Array.isArray(body.genres)?body.genres.filter((x):x is string=>typeof x==="string").map(x=>x.trim()).filter(Boolean).slice(0,20):[];
   if(title.length<1||title.length>160||!type||synopsis.length>5000)return {error:"Add a title, a content type, and a synopsis under 5,000 characters."};
   if(releaseYear!==null&&(!Number.isInteger(releaseYear)||releaseYear<1900||releaseYear>2100))return {error:"Enter a valid release year."};
-  if(!isAllowedMediaUrl(poster)||!isAllowedMediaUrl(backdrop)||!isAllowedMediaUrl(video))return {error:"Use valid HTTP or HTTPS media URLs and check your configured host allowlist."};
+  if(!isAllowedMediaUrl(poster)||!isAllowedMediaUrl(backdrop)||!isValidMediaUrl(video))return {error:"Use valid HTTP or HTTPS media URLs. Video sources must use HTTPS in production."};
   const status=["ongoing","completed","upcoming"].includes(String(body.status))?String(body.status):"completed";
   const country=typeof body.country==="string"?body.country.trim().slice(0,100):"";
   const alternative=typeof body.alternativeTitle==="string"?body.alternativeTitle.trim().slice(0,160):"";
@@ -34,7 +34,7 @@ function validTitle(body:Record<string,unknown>) {
     for(let i=0;i<episodes.length;i++) {
       const ep=episodes[i]; const name=typeof ep?.title==="string"?ep.title.trim():""; const url=typeof ep?.videoUrl==="string"?ep.videoUrl.trim():"";
       const tracks=Array.isArray(ep?.subtitles)?ep.subtitles as Record<string,unknown>[]:[];
-      if(!name||name.length>160||!isAllowedMediaUrl(url)||tracks.length>20||tracks.some(track=>typeof track.fileUrl!=="string"||!isAllowedMediaUrl(track.fileUrl)))return {error:`Check the title, video URL, and subtitle URLs for episode ${i+1}.`};
+      if(!name||name.length>160||!isValidMediaUrl(url)||tracks.length>20||tracks.some(track=>typeof track.fileUrl!=="string"||!isAllowedMediaUrl(track.fileUrl)))return {error:`Check the title, video URL, and subtitle URLs for episode ${i+1}.`};
       const seasonNumber=ep?.seasonNumber===undefined?1:Number(ep.seasonNumber),episodeNumber=ep?.episodeNumber===undefined?i+1:Number(ep.episodeNumber);
       if(!Number.isInteger(seasonNumber)||seasonNumber<1||seasonNumber>30||!Number.isInteger(episodeNumber)||episodeNumber<1||episodeNumber>500)return {error:`Episode ${i+1} has an invalid season or episode number.`};
       if(typeof ep?.thumbnailUrl==="string"&&ep.thumbnailUrl&&!isAllowedMediaUrl(ep.thumbnailUrl))return {error:`Episode ${i+1} has an invalid thumbnail URL.`};
