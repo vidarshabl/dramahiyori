@@ -6,12 +6,13 @@ import {useRouter} from "next/navigation";
 import {CastStudio,MediaLibrary,SortablePhotoEditor,type MediaItem} from "./AdminCatalogExtensions";
 import {BatchImageUploader} from "./BatchImageUploader";
 import {RemoteImage} from "./RemoteImage";
+import {HomePhotoEditor} from "./HomePhotoEditor";
 
-type Tab="overview"|"titles"|"cast"|"media"|"users"|"settings";
+type Tab="overview"|"homeEditor"|"titles"|"cast"|"media"|"users"|"settings";
 type SubtitleInput={language:string;label:string;fileUrl:string;kind:"subtitles"|"captions"};
 type EpisodeInput={id?:string;editorId:string;title:string;seasonNumber:number;episodeNumber:number;synopsis:string;thumbnailUrl:string;durationMinutes:string;videoUrl:string;subtitles:SubtitleInput[]};
 const blank={title:"",type:"series",slug:"",alternativeTitle:"",synopsis:"",releaseYear:"",country:"South Korea",status:"completed",runtimeMinutes:"",posterUrl:"",backdropUrl:"",videoUrl:"",contentRating:"",genres:"",subtitleLanguages:"",published:false,featured:false,featuredOrder:0};
-const tabs:[Tab,string][]=[["overview","Overview"],["titles","Content"],["cast","Cast & crew"],["media","Media library"],["users","Users"],["settings","Site settings"]];
+const tabs:[Tab,string][]=[["overview","Overview"],["homeEditor","Home editor"],["titles","Content"],["cast","Cast & crew"],["media","Media library"],["users","Users"],["settings","Site settings"]];
 const nextEditorId=()=>crypto.randomUUID();
 function previewImageUrl(value:string):string|null {
   try { const url=new URL(value.trim()); return url.protocol==="https:"&&url.hostname?url.toString():null; }
@@ -30,7 +31,7 @@ export function AdminDashboard({name}:{name:string}) {
   const loadSettings=useCallback(async()=>{const response=await fetch("/api/admin/settings");if(response.status===403){router.replace("/admin/login");return;}const data=await response.json();if(!response.ok)throw new Error(data.error||"Site settings could not be loaded.");setSettings(data.settings||{});},[router]);
   const loadMedia=useCallback(async()=>{const response=await fetch("/api/admin/media");if(response.status===403){router.replace("/admin/login");return;}const data=await response.json();if(!response.ok)throw new Error(data.error||"Media library could not be loaded.");setMediaAssets(data.items||[]);},[router]);
   useEffect(()=>{void Promise.all([loadOverview(),loadTitles(),loadSettings()]).catch(reason=>setError(reason instanceof Error?reason.message:"Admin data could not be loaded."));},[loadOverview,loadSettings,loadTitles]);
-  useEffect(()=>{if(tab==="titles"||tab==="cast")void loadMedia().catch(reason=>setError(reason instanceof Error?reason.message:"Media library could not be loaded."));},[tab,loadMedia]);
+  useEffect(()=>{if(tab==="titles"||tab==="cast"||tab==="homeEditor")void loadMedia().catch(reason=>setError(reason instanceof Error?reason.message:"Media library could not be loaded."));},[tab,loadMedia]);
   useEffect(()=>{if(tab!=="users")return;const timer=setTimeout(()=>void loadUsers().catch(reason=>setError(reason instanceof Error?reason.message:"User accounts could not be loaded.")),220);return()=>clearTimeout(timer);},[tab,loadUsers]);
 
   function edit(item:any) {
@@ -86,6 +87,8 @@ export function AdminDashboard({name}:{name:string}) {
         <section className="admin-section"><div className="admin-section-title"><h3>Recent content updates</h3><button onClick={()=>setTab("titles")}>Manage content →</button></div><AdminTitleTable items={overview?.titles||[]} onEdit={edit} onDelete={deleteTitle}/></section>
         <section className="admin-section"><div className="admin-section-title"><h3>Recent administrator activity</h3></div>{overview?.audit?.length?<div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Action</th><th>Record</th><th>Admin</th><th>When</th></tr></thead><tbody>{overview.audit.map((entry:any,index:number)=><tr key={index}><td>{entry.action}</td><td>{entry.entity_type} · {entry.entity_id.slice(0,8)}</td><td>{entry.email||"Account removed"}</td><td>{entry.created_at}</td></tr>)}</tbody></table></div>:<p className="admin-notice">No sensitive actions have been recorded yet.</p>}</section>
       </>}
+
+      {tab==="homeEditor"&&<HomePhotoEditor titles={titles} assets={mediaAssets} onSaved={async()=>{await Promise.all([loadTitles(),loadOverview()]);}} onAssetsChanged={loadMedia} onAddTitle={()=>newTitle("series")}/>}
 
       {tab==="titles"&&<>
         <div className="admin-page-intro"><h2>Content library</h2><p>Create and edit movies, series, genres, episodes, galleries, and authorized media URLs.</p></div>

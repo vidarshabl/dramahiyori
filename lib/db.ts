@@ -105,7 +105,7 @@ class LocalProvider implements Provider {
   }
 }
 
-const MIGRATIONS = ["001_initial", "002_cast_gallery_media", "003_media_associations", "004_featured_order"] as const;
+const MIGRATIONS = ["001_initial", "002_cast_gallery_media", "003_media_associations", "004_featured_order", "005_homepage_slides"] as const;
 
 function migrationSql(migration: typeof MIGRATIONS[number]): string {
   const file = path.join(process.cwd(), "db", "migrations", `${migration}.sql`);
@@ -324,6 +324,24 @@ export async function listTitles(filters: Record<string,string|undefined> = {}):
   const genreMap=new Map<string,string[]>();
   for(const genre of genreRows){const names=genreMap.get(genre.title_id)||[];names.push(genre.name);genreMap.set(genre.title_id,names);}
   return rows.map(row=>({...row,genres:genreMap.get(row.id)||[]}));
+}
+
+export type HomepageSlide = Title & {slide_id:string};
+
+export async function listHomepageSlides(): Promise<HomepageSlide[]> {
+  const rows=await database.prepare(`SELECT hs.id AS slide_id,hs.sort_order AS slide_order,hs.backdrop_url AS slide_backdrop_url,t.*,
+    (SELECT COUNT(*) FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE s.title_id=t.id) AS episode_count,
+    (SELECT COUNT(*) FROM seasons s WHERE s.title_id=t.id) AS season_count,
+    CASE WHEN trim(t.video_url)<>'' OR EXISTS (SELECT 1 FROM episodes pe JOIN seasons ps ON ps.id=pe.season_id WHERE ps.title_id=t.id AND trim(pe.video_url)<>'') THEN 1 ELSE 0 END AS has_playable_source,
+    (SELECT pe.id FROM episodes pe JOIN seasons ps ON ps.id=pe.season_id WHERE ps.title_id=t.id AND trim(pe.video_url)<>'' ORDER BY ps.season_number,pe.episode_number LIMIT 1) AS first_playable_episode_id
+    FROM homepage_slides hs JOIN titles t ON t.id=hs.title_id
+    WHERE t.published=1 ORDER BY hs.sort_order,hs.created_at,hs.id LIMIT 50`).all() as Array<HomepageSlide & {slide_order:number;slide_backdrop_url:string}>;
+  if(!rows.length)return [];
+  const titleIds=[...new Set(rows.map(row=>row.id))];
+  const genreRows=await database.prepare(`SELECT tg.title_id,g.name FROM title_genres tg JOIN genres g ON g.id=tg.genre_id WHERE tg.title_id IN (${titleIds.map(()=>"?").join(",")}) ORDER BY g.name COLLATE NOCASE`).all(...titleIds) as {title_id:string;name:string}[];
+  const genreMap=new Map<string,string[]>();
+  for(const genre of genreRows){const names=genreMap.get(genre.title_id)||[];names.push(genre.name);genreMap.set(genre.title_id,names);}
+  return rows.map(row=>({...row,id:row.id,backdrop_url:row.slide_backdrop_url,featured:1,featured_order:row.slide_order,slide_id:row.slide_id,genres:genreMap.get(row.id)||[]}));
 }
 
 async function getGenres(titleId:string): Promise<string[]> {

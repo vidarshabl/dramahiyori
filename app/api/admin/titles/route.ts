@@ -79,6 +79,12 @@ async function writeGallery(db:DatabaseAdapter,titleId:string,gallery:GalleryInp
   await db.prepare("DELETE FROM title_gallery WHERE title_id=?").run(titleId);
   for(const [sortOrder,image] of gallery.entries())await db.prepare("INSERT INTO title_gallery(id,title_id,image_url,caption,attribution,sort_order) VALUES(?,?,?,?,?,?)").run(randomUUID(),titleId,image.url,image.caption,image.attribution,sortOrder);
 }
+async function syncHomepageSlide(db:DatabaseAdapter,titleId:string,featured:boolean,backdropUrl:string,sortOrder:number) {
+  if(!featured){await db.prepare("DELETE FROM homepage_slides WHERE title_id=?").run(titleId);return;}
+  const existing=await db.prepare("SELECT id FROM homepage_slides WHERE title_id=? ORDER BY sort_order,created_at LIMIT 1").get(titleId) as {id:string}|undefined;
+  if(existing)await db.prepare("UPDATE homepage_slides SET sort_order=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(sortOrder,existing.id);
+  else await db.prepare("INSERT INTO homepage_slides(id,title_id,backdrop_url,sort_order) VALUES(?,?,?,?)").run(`legacy-${titleId}`,titleId,backdropUrl,sortOrder);
+}
 export async function GET() {
   const admin=await currentAdmin(); if(!admin)return badRequest("Administrator access is required.",403);
   const items=await database.prepare("SELECT * FROM titles ORDER BY updated_at DESC LIMIT 200").all() as {id:string;[key:string]:any}[];
@@ -105,6 +111,7 @@ export async function POST(request:Request) {
       await tx.prepare(`INSERT INTO titles(id,type,slug,title,alternative_title,synopsis,release_year,country,status,runtime_minutes,poster_url,backdrop_url,content_rating,subtitle_languages,video_url,published,featured,featured_order,demo,updated_at)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,CURRENT_TIMESTAMP)`).run(id,data.type,slug,data.title,data.alternative,data.synopsis,data.releaseYear,data.country,data.status,data.runtime,data.poster,data.backdrop,data.rating,JSON.stringify(data.languages),data.video,data.published?1:0,data.featured?1:0,data.featuredOrder);
       await writeGenres(tx,id,data.genres); await persistTitleEpisodes(tx,id,data.type==="series"?data.episodes:[]); await writeGallery(tx,id,data.gallery);
+      await syncHomepageSlide(tx,id,data.featured&&data.published,data.backdrop,data.featuredOrder);
       await recordTitleImageUsages(tx,id,{poster:data.poster,backdrop:data.backdrop,gallery:data.gallery});
       await audit(tx,admin.id,"content.create",id,{title:data.title});
     });
@@ -123,6 +130,7 @@ export async function PUT(request:Request) {
       const result=await tx.prepare(`UPDATE titles SET type=?,slug=?,title=?,alternative_title=?,synopsis=?,release_year=?,country=?,status=?,runtime_minutes=?,poster_url=?,backdrop_url=?,content_rating=?,subtitle_languages=?,video_url=?,published=?,featured=?,featured_order=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(data.type,slug,data.title,data.alternative,data.synopsis,data.releaseYear,data.country,data.status,data.runtime,data.poster,data.backdrop,data.rating,JSON.stringify(data.languages),data.video,data.published?1:0,data.featured?1:0,data.featuredOrder,titleId);
       if(!Number(result.changes))return false;
        await writeGenres(tx,titleId,data.genres); await persistTitleEpisodes(tx,titleId,data.type==="series"?data.episodes:[]); await writeGallery(tx,titleId,data.gallery);
+       await syncHomepageSlide(tx,titleId,data.featured&&data.published,data.backdrop,data.featuredOrder);
        await recordTitleImageUsages(tx,titleId,{poster:data.poster,backdrop:data.backdrop,gallery:data.gallery});
       await audit(tx,admin.id,"content.update",titleId,{title:data.title}); return true;
     });

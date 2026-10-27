@@ -34,6 +34,8 @@ export async function recordTitleImageUsages(
   for (const [sortOrder,image] of title.gallery.entries()) {
     await recordMediaUsage(db,image.url,{titleId},"gallery",sortOrder,image.caption,image.attribution);
   }
+  const homeSlides=await db.prepare("SELECT backdrop_url,sort_order FROM homepage_slides WHERE title_id=? ORDER BY sort_order").all(titleId) as Array<{backdrop_url:string;sort_order:number}>;
+  for(const slide of homeSlides)await recordMediaUsage(db,slide.backdrop_url,{titleId},"backdrop",slide.sort_order);
 }
 
 export async function recordCastImageUsages(
