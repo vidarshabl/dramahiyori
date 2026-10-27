@@ -761,6 +761,11 @@ button{color:inherit}
 /* Homepage slideshow editor */
 .home-editor-section>.admin-section-title{align-items:center}
 .home-slide-count{display:inline-block;margin-left:7px;padding:4px 7px;border:1px solid rgba(217,161,123,.2);border-radius:99px;color:#e2c4b4;font:500 9px var(--sans);vertical-align:middle}
+.home-upload-unavailable,.batch-storage-unavailable{display:grid;gap:6px;margin:12px 0;padding:13px 15px;border:1px solid rgba(217,161,123,.2);border-radius:9px;background:linear-gradient(110deg,rgba(217,161,123,.075),rgba(255,255,255,.012));color:#ddd4dd}
+.home-upload-unavailable strong,.batch-storage-unavailable strong{color:#f4eee8;font:500 14px var(--serif)}
+.home-upload-unavailable p,.home-upload-unavailable small,.batch-storage-unavailable p,.batch-storage-unavailable small{margin:0;color:#aaa4b0;font-size:10px;line-height:1.6}
+.home-upload-unavailable a,.batch-storage-unavailable a{width:max-content;color:#e2c4b4;font-size:10px;text-underline-offset:3px}
+.home-upload-unavailable a:hover,.batch-storage-unavailable a:hover{color:#fff}
 .home-slide-add-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:end;gap:9px;margin:16px 0}
 .home-slide-add-row label,.home-slide-content label{display:grid;gap:6px;color:#c7c2cc;font-size:9px}
 .home-slide-add-row select,.home-slide-content input,.home-slide-content select{width:100%;min-width:0;height:38px;padding:0 10px;border:1px solid var(--line);border-radius:7px;background:#17151f;color:#f4edf2;font-size:10px}

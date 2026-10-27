@@ -25,9 +25,18 @@ test("an existing 001 database upgrades in place and serves cast, galleries, and
     const {database,listTitles,listHomepageSlides,getTitle,getCastMember,listCastMembers,listCastProfessions}=await import("./lib/db.ts");
     const {recordMediaUsage,recordTitleImageUsages,recordCastImageUsages}=await import("./lib/media-usage.ts");
     const {persistHomeSlides}=await import("./lib/home-slides.ts");
+    const {isBlobStorageConfigured}=await import("./lib/blob-storage.ts");
     const {persistTitleEpisodes}=await import("./lib/title-episodes.ts");
     const applied=await database.prepare("SELECT id FROM schema_migrations ORDER BY id").all();
     assert.deepEqual(applied.map(row=>row.id),["001_initial","002_cast_gallery_media","003_media_associations","004_featured_order","005_homepage_slides"]);
+    delete process.env.BLOB_READ_WRITE_TOKEN;delete process.env.BLOB_STORE_ID;delete process.env.VERCEL_OIDC_TOKEN;
+    assert.equal(isBlobStorageConfigured(new Request("https://example.test",{headers:{"x-vercel-oidc-token":"runtime-oidc-token"}})),false);
+    process.env.BLOB_STORE_ID="connected-store";
+    assert.equal(isBlobStorageConfigured(new Request("https://example.test",{headers:{"x-vercel-oidc-token":"runtime-oidc-token"}})),true);
+    assert.equal(isBlobStorageConfigured(new Request("https://example.test")),false);
+    process.env.VERCEL_OIDC_TOKEN="development-oidc-token";
+    assert.equal(isBlobStorageConfigured(new Request("https://example.test")),true);
+    delete process.env.BLOB_STORE_ID;delete process.env.VERCEL_OIDC_TOKEN;
     const tables=await database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('cast_members','title_cast','title_gallery','cast_gallery','media_assets','media_asset_usages','homepage_slides') ORDER BY name").all();
     assert.equal(tables.length,7);
     assert.deepEqual((await listHomepageSlides()).map(slide=>[slide.slide_id,slide.id,slide.backdrop_url]),[["legacy-migration-title","migration-title","https://media.example.test/title-backdrop.jpg"]]);

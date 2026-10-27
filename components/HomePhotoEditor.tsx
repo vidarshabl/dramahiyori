@@ -14,7 +14,7 @@ function getBackdropPreview(value:string):string|null {
   catch {return null;}
 }
 
-export function HomePhotoEditor({titles,assets,onSaved,onAssetsChanged,onAddTitle}:{titles:HomeTitle[];assets:HomeAsset[];onSaved:()=>Promise<void>;onAssetsChanged:()=>Promise<void>;onAddTitle:()=>void}) {
+export function HomePhotoEditor({titles,assets,storageConfigured,onSaved,onAssetsChanged,onAddTitle}:{titles:HomeTitle[];assets:HomeAsset[];storageConfigured:boolean|null;onSaved:()=>Promise<void>;onAssetsChanged:()=>Promise<void>;onAddTitle:()=>void}) {
   const [slides,setSlides]=useState<HomeSlide[]>([]),[selectedTitle,setSelectedTitle]=useState(""),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[message,setMessage]=useState(""),[error,setError]=useState("");
   const savedSnapshot=useRef(""),dragging=useRef<number|null>(null);
 
@@ -73,7 +73,7 @@ export function HomePhotoEditor({titles,assets,onSaved,onAssetsChanged,onAddTitl
       <div className="admin-section-title"><div><h3>Hero slideshow <span className="home-slide-count">{slides.length} / {MAX_SLIDES}</span></h3><small>Photos can repeat a title. Drag to reorder, or use the arrow buttons. Removing a photo does not delete its title or media file.</small></div><button type="button" className="button button-primary" disabled={busy||loading||!dirty} onClick={()=>void saveSlides()}>{busy?"Saving…":"Save slideshow"}</button></div>
       {message&&<p className="admin-message" role="status">{message}</p>}{error&&<p className="admin-message admin-error" role="alert">{error}</p>}
 
-      <BatchImageUploader title="Upload home photos" description="Upload several wide hero images at once, then assign each photo to a slide below." roles={[{value:"backdrop",label:"Homepage photo"}]} onUploaded={(_item)=>{setMessage("Photo uploaded. Add a slide and choose it from the media list.");void onAssetsChanged().catch(()=>setError("Photo uploaded, but the media library could not be refreshed."));}}/>
+      <BatchImageUploader title="Upload home photos" description="Upload several wide hero images at once, then assign each photo to a slide below." roles={[{value:"backdrop",label:"Homepage photo"}]} storageConfigured={storageConfigured} onUploaded={(_item)=>{setMessage("Photo uploaded. Add a slide and choose it from the media list.");void onAssetsChanged().catch(()=>setError("Photo uploaded, but the media library could not be refreshed."));}}/>
 
       <div className="home-slide-add-row">
         <label>Add a photo for a published title<select value={selectedTitle} onChange={event=>setSelectedTitle(event.target.value)} disabled={!publishedTitles.length||slides.length>=MAX_SLIDES}><option value="">Choose a title for this photo…</option>{publishedTitles.map(title=><option key={title.id} value={title.id}>{title.title}</option>)}</select></label>

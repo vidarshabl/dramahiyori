@@ -11,7 +11,7 @@ const IMAGE_TYPES=new Set(["image/jpeg","image/png","image/webp","image/gif","im
 const IMAGE_EXTENSIONS=/\.(jpe?g|png|webp|gif|avif)$/i;
 const DEFAULT_ROLES:UploadRole[]=[{value:"other",label:"General image"},{value:"poster",label:"Poster"},{value:"backdrop",label:"Backdrop"},{value:"gallery",label:"Gallery photo"},{value:"portrait",label:"Cast portrait"},{value:"episode_thumbnail",label:"Episode thumbnail"},{value:"trailer_thumbnail",label:"Trailer thumbnail"},{value:"promotional",label:"Promotional artwork"}];
 
-export function BatchImageUploader({onUploaded,maxBytes=4*1024*1024,roles=DEFAULT_ROLES,title="Upload images",description="Drop multiple images here, or select files."}:{onUploaded:(item:UploadedMedia,role:string)=>void;maxBytes?:number;roles?:UploadRole[];title?:string;description?:string}) {
+export function BatchImageUploader({onUploaded,maxBytes=4*1024*1024,roles=DEFAULT_ROLES,title="Upload images",description="Drop multiple images here, or select files.",storageConfigured}:{onUploaded:(item:UploadedMedia,role:string)=>void;maxBytes?:number;roles?:UploadRole[];title?:string;description?:string;storageConfigured?:boolean|null}) {
   const input=useRef<HTMLInputElement>(null),requests=useRef(new Map<string,XMLHttpRequest>()),queueUrls=useRef(new Map<string,string>()),running=useRef(false);
   const [queue,setQueue]=useState<UploadTask[]>([]),[defaultRole,setDefaultRole]=useState(roles[0]?.value||"other"),[dragging,setDragging]=useState(false),[active,setActive]=useState(false),[error,setError]=useState("");
   useEffect(()=>()=>{for(const url of queueUrls.current.values())URL.revokeObjectURL(url);for(const request of requests.current.values())request.abort();},[]);
@@ -73,6 +73,8 @@ export function BatchImageUploader({onUploaded,maxBytes=4*1024*1024,roles=DEFAUL
     const url=queueUrls.current.get(id);if(url)URL.revokeObjectURL(url);queueUrls.current.delete(id);
     setQueue(current=>current.filter(item=>item.id!==id));
   }
+  if(storageConfigured===false)return <div className="batch-storage-unavailable" role="status"><strong>Photo uploads aren’t connected yet</strong><p>In Vercel, open this project’s <b>Storage</b> tab → <b>Create Database</b> → <b>Blob</b> → choose <b>Public</b> → create the store. Then redeploy; Vercel adds the connection to your project.</p><a href="https://vercel.com/docs/vercel-blob/public-storage" target="_blank" rel="noreferrer">See Vercel’s setup steps ↗</a><small>For now, paste a public HTTPS image link into the photo, poster, backdrop, or portrait URL field.</small></div>;
+  if(storageConfigured===null)return <p className="admin-notice" role="status">Checking photo upload storage…</p>;
   const pendingCount=queue.filter(item=>["selected","failed","cancelled"].includes(item.status)).length;
   return <section className="batch-uploader wide" aria-label={title}>
     <div className="batch-uploader-heading"><div><h4>{title}</h4><p>{description} JPEG, PNG, WebP, GIF, or AVIF · up to {(maxBytes/1024/1024).toFixed(0)} MB each.</p></div>

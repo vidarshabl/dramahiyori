@@ -4,13 +4,10 @@ import { currentAdmin } from "@/lib/auth";
 import { badRequest, json, sameOriginOrReject } from "@/lib/api";
 import { database } from "@/lib/db";
 import { MEDIA_ROLES, type MediaRole } from "@/lib/media-usage";
+import { isBlobStorageConfigured } from "@/lib/blob-storage";
 
 export const runtime="nodejs";
 const MAX_IMAGE_BYTES=4*1024*1024;
-
-function blobConfigured() {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN||(process.env.VERCEL_OIDC_TOKEN&&process.env.BLOB_STORE_ID));
-}
 
 function inspectImage(bytes:Uint8Array) {
   if(bytes.length>=8&&bytes[0]===0x89&&bytes[1]===0x50&&bytes[2]===0x4e&&bytes[3]===0x47&&bytes[4]===0x0d&&bytes[5]===0x0a&&bytes[6]===0x1a&&bytes[7]===0x0a)return {contentType:"image/png",extension:"png"};
@@ -27,7 +24,7 @@ function safeBasename(filename:string) {
   return safe||"image";
 }
 
-export async function GET() {
+export async function GET(request:Request) {
   const admin=await currentAdmin();if(!admin)return badRequest("Administrator access is required.",403);
   const [items,usages]=await Promise.all([
     database.prepare("SELECT id,url,pathname,filename,content_type,size_bytes,role,created_at FROM media_assets ORDER BY created_at DESC LIMIT 300").all() as Promise<Record<string,any>[]>,
@@ -39,13 +36,13 @@ export async function GET() {
   ]);
   const byAsset=new Map<string,Record<string,any>[]>();
   for(const usage of usages)byAsset.set(usage.media_asset_id,[...(byAsset.get(usage.media_asset_id)||[]),usage]);
-  return json({items:items.map(item=>({...item,usages:byAsset.get(item.id)||[]})),storageConfigured:blobConfigured(),maxImageBytes:MAX_IMAGE_BYTES});
+  return json({items:items.map(item=>({...item,usages:byAsset.get(item.id)||[]})),storageConfigured:isBlobStorageConfigured(request),maxImageBytes:MAX_IMAGE_BYTES});
 }
 
 export async function POST(request:Request) {
   const rejected=sameOriginOrReject(request);if(rejected)return rejected;
   const admin=await currentAdmin();if(!admin)return badRequest("Administrator access is required.",403);
-  if(!blobConfigured())return badRequest("Persistent image storage is not configured. Connect a Vercel Blob store to this project first.",503);
+  if(!isBlobStorageConfigured(request))return badRequest("Persistent image storage is not configured. Connect a Vercel Blob store to this project first.",503);
   let file:FormDataEntryValue|null,roleValue:FormDataEntryValue|null,uploadIdValue:FormDataEntryValue|null;
   try {const formData=await request.formData();file=formData.get("file");roleValue=formData.get("role");uploadIdValue=formData.get("uploadId");} catch {return badRequest("Choose an image file to upload.");}
   if(typeof File==="undefined"||!(file instanceof File))return badRequest("Choose an image file to upload.");
@@ -77,7 +74,7 @@ export async function POST(request:Request) {
 export async function DELETE(request:Request) {
   const rejected=sameOriginOrReject(request);if(rejected)return rejected;
   const admin=await currentAdmin();if(!admin)return badRequest("Administrator access is required.",403);
-  if(!blobConfigured())return badRequest("Persistent image storage is not configured.",503);
+  if(!isBlobStorageConfigured(request))return badRequest("Persistent image storage is not configured.",503);
   const id=new URL(request.url).searchParams.get("id");if(!id)return badRequest("Choose an image to remove.");
   const asset=await database.prepare("SELECT id,url,pathname FROM media_assets WHERE id=?").get(id) as {id:string;url:string;pathname:string}|undefined;
   if(!asset)return badRequest("That media item could not be found.",404);
