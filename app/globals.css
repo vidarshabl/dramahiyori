@@ -353,6 +353,11 @@ button{color:inherit}
 .admin-editor .wide{grid-column:1/-1}
 .admin-editor textarea,.settings-card textarea{height:105px;padding:10px;resize:vertical;line-height:1.5}
 .admin-editor select{appearance:auto}
+.admin-image-preview-hint{color:#918c9b;font-size:9px;font-weight:400;line-height:1.5}
+.admin-image-url-preview{position:relative;width:100%;overflow:hidden;border:1px solid rgba(255,213,224,.12);border-radius:8px;background:linear-gradient(145deg,#211329,#302336)}
+.admin-image-url-preview-poster{width:105px;aspect-ratio:2/3}
+.admin-image-url-preview-backdrop{max-width:560px;aspect-ratio:16/7}
+.admin-image-url-preview img{object-fit:cover}
 .admin-checks{display:flex;flex-wrap:wrap;align-items:center;gap:18px;padding:8px 0}
 .admin-checks label{display:flex;align-items:center;gap:7px}
 .admin-checks input{width:15px;height:15px;accent-color:#bd9a9d}
