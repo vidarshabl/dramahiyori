@@ -8,11 +8,17 @@ type User={id:string;email:string;display_name:string;role:string};
 function Wordmark({brand,tagline,className=""}:{brand:string;tagline:string;className?:string}){return <Link href="/" className={"brand "+className} aria-label={brand+" home"}><span className="brand-mark">✦</span>{brand.trim().toLowerCase()==="deardrama"?<span>dear<span className="brand-script">drama</span><small>{tagline}</small></span>:<span className="custom-wordmark">{brand}<small>{tagline}</small></span>}</Link>}
 export function SiteHeader() {
   const [user,setUser]=useState<User|null>(null), [open,setOpen]=useState(false), [menu,setMenu]=useState(false), [query,setQuery]=useState(""),[scrolled,setScrolled]=useState(false);
+  const [currentSearch,setCurrentSearch]=useState("");
   const [brand,setBrand]=useState("DearDrama"),[tagline,setTagline]=useState("stories that stay");
   const pathname=usePathname(), router=useRouter();
+  const navLinks=[{href:"/",label:"Home"},{href:"/browse?type=series",label:"K-Dramas"},{href:"/browse?type=movie",label:"Movies"},{href:"/browse?status=ongoing",label:"Ongoing"},{href:"/genres",label:"Genres"},{href:"/new",label:"New releases"}];
+  const mobileLinks=[{href:"/",label:"Home"},{href:"/browse?type=series",label:"K-Dramas"},{href:"/browse?type=movie",label:"Movies"},{href:"/genres",label:"Genres & moods"},{href:"/new",label:"New releases"},{href:"/watchlist",label:"My watchlist"}];
+  function isActive(href:string){const [path,queryString=""]=href.split("?");if(pathname!==path)return false;if(!queryString)return true;const active=new URLSearchParams(currentSearch);return Array.from(new URLSearchParams(queryString)).every(([key,value])=>active.get(key)===value);}
   useEffect(()=>{fetch("/api/auth/me").then(r=>r.json()).then(d=>setUser(d.user)).catch(()=>{});},[pathname]);
   useEffect(()=>{fetch("/api/settings").then(r=>r.json()).then(d=>{if(d.settings?.brand)setBrand(d.settings.brand);if(d.settings?.tagline)setTagline(d.settings.tagline);}).catch(()=>{});},[]);
   useEffect(()=>{const onScroll=()=>setScrolled(window.scrollY>26);window.addEventListener("scroll",onScroll,{passive:true});onScroll();return()=>window.removeEventListener("scroll",onScroll);},[]);
+  useEffect(()=>{setCurrentSearch(window.location.search);},[pathname]);
+  useEffect(()=>{const syncSearch=()=>setCurrentSearch(window.location.search);window.addEventListener("popstate",syncSearch);return()=>window.removeEventListener("popstate",syncSearch);},[]);
   useEffect(()=>{setMenu(false);},[pathname]);
   function search(e:FormEvent) {e.preventDefault();router.push("/search"+(query.trim()?"?q="+encodeURIComponent(query.trim()):""));setOpen(false);}
   async function logout() {await fetch("/api/auth/logout",{method:"POST"});setUser(null);router.push("/");router.refresh();}
@@ -20,18 +26,21 @@ export function SiteHeader() {
     <header className={"site-header"+(scrolled?" is-scrolled":"")}><div className="header-inner">
       <Wordmark brand={brand} tagline={tagline}/>
       <nav className="desktop-nav" aria-label="Main navigation">
-        <Link href="/">Home</Link><Link href="/browse?type=series">K-Dramas</Link><Link href="/browse?type=movie">Movies</Link><Link href="/browse?status=ongoing">Ongoing</Link><Link href="/genres">Genres</Link><Link href="/new">New releases</Link>
+        {navLinks.map(link=><Link key={link.href} href={link.href} className={isActive(link.href)?"is-active":undefined} aria-current={isActive(link.href)?"page":undefined} onClick={()=>setCurrentSearch(link.href.includes("?")?"?"+link.href.split("?")[1]:"")}>{link.label}</Link>)}
       </nav>
       <div className="header-actions">
-        <button className="icon-button search-toggle" onClick={()=>setOpen(!open)} aria-label="Open search" aria-expanded={open}><Icon name="search"/></button>
+        <button type="button" className="icon-button search-toggle" onClick={()=>setOpen(!open)} aria-label={open?"Close search":"Open search"} aria-expanded={open}><Icon name="search"/></button>
         <Link href="/watchlist" className="icon-button watchlist-link" aria-label="Watchlist"><Icon name="bookmark"/></Link>
         {user ? <div className="account-wrap"><button className="avatar-button" onClick={()=>setMenu(!menu)} aria-expanded={menu} aria-label="Account menu">{user.display_name.slice(0,1).toUpperCase()}</button>{menu&&<div className="account-popover"><span className="popover-name">{user.display_name}</span><Link href="/account">Your account</Link><Link href="/watchlist">Watchlist</Link>{user.role==="admin"&&<Link href="/admin/dashboard">Admin dashboard</Link>}<button onClick={logout}>Sign out</button></div>}</div>
           : <div className="auth-links"><Link href="/login">Sign in</Link><Link href="/register" className="nav-join">Join free</Link></div>}
-        <button className="icon-button mobile-menu-button" onClick={()=>setMenu(!menu)} aria-label={menu?"Close menu":"Open menu"} aria-expanded={menu}><Icon name={menu?"close":"menu"}/></button>
+        <button type="button" className="icon-button mobile-menu-button" onClick={()=>setMenu(!menu)} aria-label={menu?"Close menu":"Open menu"} aria-expanded={menu}><Icon name={menu?"close":"menu"}/></button>
       </div>
     </div>
     {open&&<form className="header-search" onSubmit={search}><Icon name="search"/><input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="Find your next favorite story" aria-label="Search dramas and movies"/><button type="submit" className="button button-small">Search</button></form>}
-    {menu&&<nav className="mobile-nav" aria-label="Mobile navigation"><Link href="/">Home</Link><Link href="/browse?type=series">K-Dramas</Link><Link href="/browse?type=movie">Movies</Link><Link href="/genres">Genres &amp; moods</Link><Link href="/new">New releases</Link><Link href="/watchlist">My watchlist</Link>{user?<><Link href="/account">My account</Link>{user.role==="admin"&&<Link href="/admin/dashboard">Admin dashboard</Link>}<button onClick={logout}>Sign out</button></>:<><Link href="/login">Sign in</Link><Link href="/register">Create account</Link></>}</nav>}
+    {menu&&<nav className="mobile-nav" aria-label="Mobile navigation">
+      {mobileLinks.map(({href,label})=><Link key={href} href={href} className={isActive(href)?"is-active":undefined} aria-current={isActive(href)?"page":undefined}>{label}</Link>)}
+      {user?<><Link href="/account" className={isActive("/account")?"is-active":undefined} aria-current={isActive("/account")?"page":undefined}>My account</Link>{user.role==="admin"&&<Link href="/admin/dashboard" className={isActive("/admin/dashboard")?"is-active":undefined} aria-current={isActive("/admin/dashboard")?"page":undefined}>Admin dashboard</Link>}<button type="button" onClick={logout}>Sign out</button></>:<><Link href="/login" className={isActive("/login")?"is-active":undefined} aria-current={isActive("/login")?"page":undefined}>Sign in</Link><Link href="/register" className={isActive("/register")?"is-active":undefined} aria-current={isActive("/register")?"page":undefined}>Create account</Link></>}
+    </nav>}
     </header>
   </>;
 }
