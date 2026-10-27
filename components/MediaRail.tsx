@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import type { Title } from "@/lib/db";
@@ -11,7 +12,7 @@ export function MediaCard({item,initialSaved=false}:{item:Title;initialSaved?:bo
   }
   return <article className="media-card">
     <Link href={"/title/"+item.slug} className="poster-link" aria-label={"View "+item.title}>
-      <div className="poster-wrap"><img src={item.poster_url||""} alt={item.title+" poster"} loading="lazy" onError={e=>{e.currentTarget.style.visibility="hidden";}}/><div className="poster-fallback" aria-hidden="true"><span>✦</span>{item.title}</div><span className="poster-type">{item.type==="movie"?"FILM":"SERIES"}</span>{item.demo===1&&<span className="demo-pill">SAMPLE</span>}<span className="poster-play"><span>▶</span></span></div>
+      <div className="poster-wrap">{item.poster_url&&<Image fill sizes="(max-width: 640px) 44vw, (max-width: 1200px) 22vw, 172px" src={item.poster_url} alt={item.title+" poster"} loading="lazy" onError={e=>{e.currentTarget.style.visibility="hidden";}}/>}<div className="poster-fallback" aria-hidden="true"><span>✦</span>{item.title}</div><span className="poster-type">{item.type==="movie"?"FILM":"SERIES"}</span>{item.demo===1&&<span className="demo-pill">SAMPLE</span>}<span className="poster-play"><span>▶</span></span></div>
       <div className="card-meta"><h3>{item.title}</h3><div className="card-submeta"><span>{item.release_year||"—"}</span><i>·</i><span>{item.status==="ongoing"?"Ongoing":item.status==="upcoming"?"Coming soon":"Complete"}</span></div><p>{item.genres?.slice(0,2).join(" · ")}</p></div>
     </Link>
     <button className={"save-card"+(saved?" is-saved":"")} onClick={toggle} disabled={busy} aria-label={(saved?"Remove from":"Add to")+" watchlist: "+item.title} aria-pressed={saved}>{saved?"♥":"＋"}</button>{message&&<span className="card-message" role="status">{message}</span>}

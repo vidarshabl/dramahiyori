@@ -17,7 +17,7 @@ function validTitle(body:Record<string,unknown>) {
   const genres=Array.isArray(body.genres)?body.genres.filter((x):x is string=>typeof x==="string").map(x=>x.trim()).filter(Boolean).slice(0,20):[];
   if(title.length<1||title.length>160||!type||synopsis.length>5000)return {error:"Add a title, a content type, and a synopsis under 5,000 characters."};
   if(releaseYear!==null&&(!Number.isInteger(releaseYear)||releaseYear<1900||releaseYear>2100))return {error:"Enter a valid release year."};
-  if(!isAllowedMediaUrl(poster)||!isAllowedMediaUrl(backdrop)||!isValidMediaUrl(video))return {error:"Use valid HTTP or HTTPS media URLs. Video sources must use HTTPS in production."};
+  if(!isValidMediaUrl(poster)||!isValidMediaUrl(backdrop)||!isValidMediaUrl(video))return {error:"Use valid HTTP or HTTPS media URLs. Video sources must use HTTPS in production."};
   const status=["ongoing","completed","upcoming"].includes(String(body.status))?String(body.status):"completed";
   const country=typeof body.country==="string"?body.country.trim().slice(0,100):"";
   const alternative=typeof body.alternativeTitle==="string"?body.alternativeTitle.trim().slice(0,160):"";
@@ -37,7 +37,7 @@ function validTitle(body:Record<string,unknown>) {
       if(!name||name.length>160||!isValidMediaUrl(url)||tracks.length>20||tracks.some(track=>typeof track.fileUrl!=="string"||!isAllowedMediaUrl(track.fileUrl)))return {error:`Check the title, video URL, and subtitle URLs for episode ${i+1}.`};
       const seasonNumber=ep?.seasonNumber===undefined?1:Number(ep.seasonNumber),episodeNumber=ep?.episodeNumber===undefined?i+1:Number(ep.episodeNumber);
       if(!Number.isInteger(seasonNumber)||seasonNumber<1||seasonNumber>30||!Number.isInteger(episodeNumber)||episodeNumber<1||episodeNumber>500)return {error:`Episode ${i+1} has an invalid season or episode number.`};
-      if(typeof ep?.thumbnailUrl==="string"&&ep.thumbnailUrl&&!isAllowedMediaUrl(ep.thumbnailUrl))return {error:`Episode ${i+1} has an invalid thumbnail URL.`};
+      if(typeof ep?.thumbnailUrl==="string"&&ep.thumbnailUrl&&!isValidMediaUrl(ep.thumbnailUrl))return {error:`Episode ${i+1} has an invalid thumbnail URL.`};
     }
   }
   return {title,type,synopsis,releaseYear,poster,backdrop,video,genres,status,country,alternative,rating,runtime,languages,published,featured,episodes};
@@ -62,7 +62,7 @@ async function writeEpisodes(db:DatabaseAdapter,titleId:string,episodes:Record<s
   for(let index=0;index<episodes.length;index++){
     const ep=episodes[index],episodeId=randomUUID();
     const seasonNumber=Number(ep.seasonNumber)||1,episodeNumber=Number(ep.episodeNumber)||index+1,seasonId=seasonIds.get(seasonNumber)!;
-    await db.prepare("INSERT INTO episodes(id,season_id,episode_number,title,synopsis,thumbnail_url,duration_minutes,video_url) VALUES(?,?,?,?,?,?,?,?)").run(episodeId,seasonId,episodeNumber,String(ep.title).trim(),typeof ep.synopsis==="string"?ep.synopsis.slice(0,1000):"",typeof ep.thumbnailUrl==="string"&&isAllowedMediaUrl(ep.thumbnailUrl)?ep.thumbnailUrl:"",Number.isInteger(Number(ep.durationMinutes))?Number(ep.durationMinutes)||null:null,typeof ep.videoUrl==="string"?ep.videoUrl.trim():"");
+    await db.prepare("INSERT INTO episodes(id,season_id,episode_number,title,synopsis,thumbnail_url,duration_minutes,video_url) VALUES(?,?,?,?,?,?,?,?)").run(episodeId,seasonId,episodeNumber,String(ep.title).trim(),typeof ep.synopsis==="string"?ep.synopsis.slice(0,1000):"",typeof ep.thumbnailUrl==="string"&&isValidMediaUrl(ep.thumbnailUrl)?ep.thumbnailUrl:"",Number.isInteger(Number(ep.durationMinutes))?Number(ep.durationMinutes)||null:null,typeof ep.videoUrl==="string"?ep.videoUrl.trim():"");
     const tracks=Array.isArray(ep.subtitles)?ep.subtitles as Record<string,unknown>[]:[];
     for(const track of tracks)if(typeof track.language==="string"&&typeof track.fileUrl==="string")await db.prepare("INSERT INTO subtitle_tracks(id,episode_id,language,label,file_url,kind) VALUES(?,?,?,?,?,?)").run(randomUUID(),episodeId,track.language.slice(0,30),typeof track.label==="string"?track.label.slice(0,80):track.language,track.fileUrl,track.kind==="captions"?"captions":"subtitles");
   }

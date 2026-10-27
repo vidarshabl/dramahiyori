@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import Link from "next/link";
 import {useEffect,useState} from "react";
 import type {Title} from "@/lib/db";
@@ -19,7 +20,7 @@ export function ContinueWatching(){
  const [items,setItems]=useState<any[]>([]);
  useEffect(()=>{fetch("/api/progress").then(r=>r.json()).then(d=>setItems(d.items||[])).catch(()=>{});},[]);
  if(!items.length)return null;
- return <section className="continue-section"><div className="section-heading"><div><span className="eyebrow">PICK UP WHERE YOU LEFT OFF</span><h2>Continue watching</h2></div></div><div className="continue-rail">{items.map(item=><Link href={"/watch?slug="+item.slug+(item.episode_id?"&episode="+item.episode_id:"")} key={item.title_id} className="continue-card"><div className="continue-thumb"><img src={item.poster_url} alt=""/><span className="continue-play">▶</span><span className="progress-track"><i style={{width:(item.duration_seconds?Math.min(100,Math.max(3,item.position_seconds/item.duration_seconds*100)):3)+"%"}}/></span></div><div><h3>{item.title}</h3><span>{item.episode_number?"Episode "+item.episode_number+" · ":""}Continue watching</span></div></Link>)}</div></section>;
+ return <section className="continue-section"><div className="section-heading"><div><span className="eyebrow">PICK UP WHERE YOU LEFT OFF</span><h2>Continue watching</h2></div></div><div className="continue-rail">{items.map(item=><Link href={"/watch?slug="+item.slug+(item.episode_id?"&episode="+item.episode_id:"")} key={item.title_id} className="continue-card"><div className="continue-thumb">{item.poster_url&&<Image fill sizes="84px" src={item.poster_url} alt=""/>}<span className="continue-play">▶</span><span className="progress-track"><i style={{width:(item.duration_seconds?Math.min(100,Math.max(3,item.position_seconds/item.duration_seconds*100)):3)+"%"}}/></span></div><div><h3>{item.title}</h3><span>{item.episode_number?"Episode "+item.episode_number+" · ":""}Continue watching</span></div></Link>)}</div></section>;
 }
 
 export function MoodGrid({moods}:{moods:string[]}) {return <section className="mood-section"><div className="section-heading"><div><span className="eyebrow">TELL US HOW YOU FEEL</span><h2>Stories for this mood</h2></div><Link href="/genres" className="text-link">All genres <span>↗</span></Link></div><div className="mood-grid">{moods.map((m,i)=><Link href={"/browse?genre="+encodeURIComponent(m)} className={"mood-tile mood-"+(i%5)} key={m}><span className="mood-spark">{["✦","☾","♡","✧","⋆"][i%5]}</span><span>{m}</span><span className="mood-arrow">↗</span></Link>)}</div></section>}

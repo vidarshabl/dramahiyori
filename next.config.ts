@@ -5,9 +5,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   images: {
     remotePatterns: [
-      { protocol: "https", hostname: "archive.org", pathname: "/**" },
-      { protocol: "https", hostname: "**.archive.org", pathname: "/**" },
-      { protocol: "https", hostname: "*.us.archive.org", pathname: "/**" },
+      { protocol: "https", hostname: "**", pathname: "/**" },
     ],
   },
   outputFileTracingIncludes: { "/*": ["./db/migrations/*.sql"] },

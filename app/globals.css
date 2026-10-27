@@ -55,6 +55,11 @@ button{color:inherit}
 .hero-genres{display:flex;gap:8px;flex-wrap:wrap}
 .hero-genres span,.hero-genres a{font-size:10px;color:#f0e8df;border:1px solid rgba(255,255,255,.24);padding:5px 10px;border-radius:99px;background:rgba(26,28,41,.2)}
 .hero-synopsis{max-width:470px;font-size:13px;color:rgba(255,255,255,.82);line-height:1.8;margin:22px 0 24px}
+.hero h1,.hero-synopsis,.hero-actions{opacity:0;animation:hero-rise-in .72s var(--ease) both}
+.hero h1{animation-delay:.08s}
+.hero-synopsis{animation-delay:.18s}
+.hero-actions{animation-delay:.28s}
+@keyframes hero-rise-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 .hero-actions,.detail-actions{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
 .button{min-height:46px;display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:0 20px;border-radius:999px;border:1px solid transparent;font-weight:600;font-size:12px;letter-spacing:.1px;cursor:pointer;transition:transform .22s var(--ease),background .22s ease,border-color .22s ease,box-shadow .22s ease}
 .button:hover{transform:translateY(-2px)}
@@ -86,9 +91,10 @@ button{color:inherit}
 .text-link:hover{color:#f1dfbd}
 .text-link span{font-size:15px}
 .media-rail,.continue-rail{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(145px,172px);gap:17px;overflow-x:auto;padding:2px 1px 20px;scroll-snap-type:x mandatory;scrollbar-width:thin;scrollbar-color:#49465c transparent}
-.media-card{position:relative;min-width:0;scroll-snap-align:start}
+.media-card{position:relative;min-width:0;scroll-snap-align:start;transition:transform .28s var(--ease)}
+.media-card:hover{transform:translateY(-3px)}
 .poster-link{display:block}
-.poster-wrap{position:relative;overflow:hidden;aspect-ratio:2/3;border-radius:12px;background:linear-gradient(145deg,#33324a,#805e72 55%,#23253b);box-shadow:0 7px 25px #0003}
+.poster-wrap{position:relative;overflow:hidden;aspect-ratio:2/3;border-radius:12px;background:linear-gradient(145deg,#33324a,#805e72 55%,#23253b);box-shadow:0 7px 25px #0003;transition:box-shadow .28s var(--ease)}
 .poster-wrap img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .6s var(--ease),filter .4s ease}
 .poster-fallback{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:15px;text-align:center;padding:20px;color:#f5e9db;background:radial-gradient(circle at 70% 30%,#c19b9c44,transparent 38%),linear-gradient(150deg,#33334b,#8a6274 65%,#24273d);font:500 21px var(--serif)}
 .poster-fallback span{color:#ddc897;font-size:32px}
@@ -98,6 +104,7 @@ button{color:inherit}
 .poster-play{position:absolute;inset:0;display:grid;place-items:center;background:linear-gradient(0deg,#111321b5,transparent 55%);opacity:0;transition:opacity .3s ease}
 .poster-play span{width:44px;height:44px;border:1px solid #fff8;border-radius:50%;display:grid;place-items:center;background:#fff2;color:#fff;padding-left:3px}
 .media-card:hover .poster-wrap img{transform:scale(1.055);filter:brightness(.8)}
+.media-card:hover .poster-wrap{box-shadow:0 13px 32px #0006}
 .media-card:hover .poster-play,.media-card:focus-within .poster-play{opacity:1}
 .card-meta{padding:11px 2px 0}
 .card-meta h3{font:500 15px/1.3 var(--serif);margin:0;color:#f4eee8;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
@@ -108,9 +115,11 @@ button{color:inherit}
 .save-card:hover,.save-card.is-saved{color:#f4c4c4;background:#8d5668;border-color:#d9a5ac}
 .card-message{position:absolute;right:0;bottom:100%;background:#29273a;border:1px solid var(--line);padding:6px 8px;border-radius:6px;font-size:9px;z-index:2}
 .continue-rail{grid-auto-columns:minmax(260px,325px)}
-.continue-card{display:grid;grid-template-columns:84px 1fr;gap:12px;align-items:center;scroll-snap-align:start}
+.continue-card{display:grid;grid-template-columns:84px 1fr;gap:12px;align-items:center;scroll-snap-align:start;transition:transform .24s var(--ease)}
+.continue-card:hover{transform:translateY(-2px)}
 .continue-thumb{position:relative;height:58px;overflow:hidden;border-radius:7px;background:#343448}
-.continue-thumb img{width:100%;height:100%;object-fit:cover;opacity:.7}
+.continue-thumb img{width:100%;height:100%;object-fit:cover;opacity:.7;transition:transform .3s ease,opacity .3s ease}
+.continue-card:hover .continue-thumb img{transform:scale(1.06);opacity:.95}
 .continue-play{position:absolute;inset:0;display:grid;place-items:center;font-size:13px}
 .progress-track{position:absolute;bottom:0;left:0;right:0;height:3px;background:#ffffff66}
 .progress-track i{display:block;height:100%;background:#d3a9ab}
