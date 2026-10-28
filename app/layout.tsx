@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import Script from "next/script";
 import { PublicChrome } from "@/components/SiteChrome";
 import { getSiteUrl } from "@/lib/site-url";
 import "./globals.css";
@@ -37,12 +36,6 @@ export default function RootLayout({
       <body>
         <PublicChrome>{children}</PublicChrome>
 
-        {/* Monetag In-Page Push Banner Script */}
-        <Script
-          src="https://nap5k.com/tag.min.js"
-          data-zone="12139234"
-          strategy="lazyOnload"
-        />
       </body>
     </html>
   );

@@ -18,8 +18,8 @@ function safeBackdrop(value:string) {
 export async function generateMetadata({params}:{params:Promise<{slug:string}>}) {
   const {slug}=await params;
   const item=await getTitle(slug);
-  if(!item)return {title:"Story not found · DearDrama"};
-  return {title:item.title+" · DearDrama",description:item.synopsis,openGraph:{title:item.title,description:item.synopsis,images:item.backdrop_url?[item.backdrop_url]:[]}};
+  if(!item)return {title:"Story not found · Kverse"};
+  return {title:item.title+" · Kverse",description:item.synopsis,openGraph:{title:item.title,description:item.synopsis,images:item.backdrop_url?[item.backdrop_url]:[]}};
 }
 
 export default async function TitlePage({params}:{params:Promise<{slug:string}>}) {
@@ -38,10 +38,10 @@ export default async function TitlePage({params}:{params:Promise<{slug:string}>}
   return <main className="detail-page">
     <section className="detail-hero" aria-hidden="true" style={{backgroundImage:backdrop?`linear-gradient(90deg,rgba(8,8,13,.94),rgba(8,8,13,.62) 52%,rgba(8,8,13,.15)),linear-gradient(0deg,#08080d,transparent 60%),url("${backdrop}")`:`radial-gradient(ellipse at 75% 20%,rgba(232,62,104,.15),transparent 34%),linear-gradient(180deg,#17111d,#08080d)`}}/>
     <div className="detail-main">
-      <div className="detail-poster">{item.poster_url?<RemoteImage src={item.poster_url} sizes="(max-width: 640px) 112px, 245px" alt={item.title+" poster"} fallbackLabel={item.title}/>:<div className="detail-poster-fallback" aria-hidden="true">{item.title}</div>}{item.demo===1&&<span>DEARDRAMA SAMPLE</span>}</div>
+      <div className="detail-poster">{item.poster_url?<RemoteImage src={item.poster_url} sizes="(max-width: 640px) 112px, 245px" alt={item.title+" poster"} fallbackLabel={item.title}/>:<div className="detail-poster-fallback" aria-hidden="true">{item.title}</div>}{item.demo===1&&<span>KVERSE SAMPLE</span>}</div>
       <div className="detail-copy">
         <Link href="/browse" className="back-link">← Back to explore</Link>
-        <span className="eyebrow detail-eyebrow">{item.type==="movie"?"A DEARDRAMA FILM":"A DEARDRAMA SERIES"}{item.demo===1&&" · SAMPLE RECORD"}</span>
+        <span className="eyebrow detail-eyebrow">{item.type==="movie"?"A KVERSE FILM":"A KVERSE SERIES"}{item.demo===1&&" · SAMPLE RECORD"}</span>
         <h1>{item.title}</h1>
         {item.alternative_title&&<p className="detail-alt">{item.alternative_title}</p>}
         {!!detailFacts.length&&<div className="detail-facts">{detailFacts.map((fact,index)=><span key={`${index}-${fact}`}>{index>0&&<i aria-hidden="true">·</i>}{fact}</span>)}</div>}

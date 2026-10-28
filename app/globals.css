@@ -18,6 +18,10 @@ button{color:inherit}
 .brand>span:last-child{display:flex;align-items:baseline;flex-wrap:wrap}
 .brand-mark{color:var(--gold);font-size:21px;transform:translateY(-5px);filter:drop-shadow(0 0 9px rgba(217,161,123,.45));animation:brand-glint 5s ease-in-out infinite}
 .brand-script{font-family:var(--script);font-size:32px;font-weight:400;color:var(--rose-light);letter-spacing:0;margin-left:2px;text-shadow:0 0 20px rgba(232,62,104,.24)}
+.brand-kverse{display:flex;align-items:baseline;flex-wrap:wrap}
+.brand-kverse strong{font:600 25px/.9 var(--serif);letter-spacing:-1.3px;color:#fff}
+.brand-kverse em{margin-left:1px;color:var(--rose-light);font:400 30px/.9 var(--script);letter-spacing:0;text-shadow:0 0 20px rgba(232,62,104,.24)}
+.brand-kverse small{width:100%;font:500 8px var(--sans);letter-spacing:2px;text-transform:uppercase;color:var(--muted-light);margin-top:5px}
 .brand small{width:100%;font:500 8px var(--sans);letter-spacing:2px;text-transform:uppercase;color:var(--muted-light);margin-top:4px}
 .custom-wordmark{font:500 20px var(--serif);letter-spacing:-.5px}
 .desktop-nav{display:flex;align-items:center;gap:clamp(14px,2vw,29px);margin-left:auto}
@@ -177,8 +181,17 @@ button{color:inherit}
 .admin-entry:hover{color:#e6d4b3}
 .admin-entry span{color:var(--gold);padding-left:4px}
 .footer-links{display:flex;flex-wrap:wrap;gap:20px;padding:25px 0;border-bottom:1px solid var(--line);font-size:10px}
-.footer-links a:hover{color:white}
+.footer-links a:hover,.footer-links button:hover{color:white}
+.footer-links button{padding:0;border:0;background:none;color:inherit;font-size:inherit;cursor:pointer}
 .footer-bottom{display:flex;justify-content:space-between;gap:16px;padding-top:17px;font-size:9px;color:#7d7d8d}
+.consent-panel{position:fixed;z-index:80;left:max(16px,calc((100vw - 1120px)/2));right:max(16px,calc((100vw - 1120px)/2));bottom:max(16px,env(safe-area-inset-bottom));display:flex;align-items:center;justify-content:space-between;gap:24px;padding:16px 18px;border:1px solid rgba(255,213,224,.18);border-radius:13px;background:rgba(17,15,24,.96);box-shadow:0 18px 55px rgba(0,0,0,.42);backdrop-filter:blur(18px);animation:search-panel-in .22s var(--ease) both}
+.consent-copy{min-width:0;max-width:620px}
+.consent-copy strong{color:#fbf5f3;font:500 16px var(--serif)}
+.consent-copy p{margin:4px 0;color:#c4bdc8;font-size:10px;line-height:1.55}
+.consent-copy a{color:var(--gold);font-size:10px}
+.consent-copy a:hover{text-decoration:underline;text-underline-offset:3px}
+.consent-actions{display:flex;flex:0 0 auto;gap:8px}
+.consent-actions .button{min-height:42px;padding:0 15px;font-size:10px}
 
 .page-shell{max-width:1360px;min-height:calc(100vh - 82px);margin:auto;padding:139px 48px 75px}
 .page-heading{margin-bottom:37px;max-width:750px}
@@ -406,12 +419,12 @@ button{color:inherit}
 }
 @media(max-width:650px){
  .header-inner{height:66px;padding:0 15px;gap:9px}.site-header{margin-bottom:-66px}
- .brand{font-size:22px}.brand-script{font-size:29px}.brand-mark{font-size:18px}.site-header .brand small{display:none}
+ .brand{font-size:22px}.brand-script{font-size:29px}.brand-kverse strong{font-size:23px}.brand-kverse em{font-size:28px}.brand-mark{font-size:18px}.site-header .brand small{display:none}
  .header-actions{gap:2px}.icon-button{width:42px;height:42px}.auth-links{display:none}
  .watchlist-link{display:none}.mobile-nav{top:65px;padding-left:16px;padding-right:16px}
  .header-search{top:60px;right:10px}
- .hero{height:auto;min-height:700px;max-height:none;padding:120px 22px 100px;background-position:61% center;align-items:flex-end}
- .hero-art{top:66px;right:0;bottom:auto;left:0;height:48vw;min-height:190px;max-height:312px;background-position:center top;animation:none}
+ .hero{height:auto;min-height:0;max-height:none;padding:calc(66px + min(56.25vw,280px)) 22px 92px;background-position:61% center;align-items:flex-start}
+ .hero-art{top:66px;right:0;bottom:auto;left:0;height:min(56.25vw,280px);min-height:0;max-height:none;background-position:center top;animation:none}
  .hero-art-image{object-fit:contain;object-position:center top}
  .hero-art-incoming{animation:hero-art-cinematic-reveal .95s cubic-bezier(.2,.72,.2,1) both}
  .hero:after{background:radial-gradient(ellipse at 72% 25%,rgba(232,62,104,.1),transparent 37%),linear-gradient(0deg,#08080d 0%,rgba(8,8,13,.94) 30%,rgba(8,8,13,.45) 64%,rgba(8,8,13,.18) 100%)}
@@ -423,6 +436,9 @@ button{color:inherit}
  .hero-note{font-size:9px;margin-top:17px}
  .hero-controls{right:20px;bottom:25px;gap:7px}.hero-control{width:42px;height:42px}.hero-progress button{width:30px;height:44px}
  .hero-side-label{display:none}
+ .consent-panel{left:10px;right:10px;bottom:max(10px,env(safe-area-inset-bottom));align-items:stretch;flex-direction:column;gap:10px;padding:13px;border-radius:11px}
+ .consent-copy strong{font-size:15px}.consent-copy p{font-size:9px}
+ .consent-actions{width:100%;gap:7px}.consent-actions .button{flex:1;min-width:0;min-height:42px;padding:0 8px;font-size:9px}
  .home-content{padding:8px 16px 20px}
  .rail-section,.continue-section,.mood-section{margin:43px 0}
  .section-heading{margin-bottom:14px;align-items:flex-start;flex-wrap:wrap;gap:10px}
@@ -518,7 +534,7 @@ button{color:inherit}
  .legal-copy h2{font-size:20px}
 }
 @media(max-width:360px){
- .hero{min-height:680px;padding-left:17px;padding-right:17px}
+ .hero{padding-left:17px;padding-right:17px}
  .hero-actions .button{padding:0 14px;font-size:10px}
  .media-rail{grid-auto-columns:44vw}
  .header-actions .nav-join{display:none}
@@ -529,7 +545,7 @@ button{color:inherit}
  .media-card:hover .poster-wrap img{transform:scale(1.055);filter:brightness(.8)}
  .media-card:hover .poster-wrap{box-shadow:0 16px 36px rgba(0,0,0,.48),0 0 0 1px rgba(217,161,123,.2),0 0 26px rgba(232,62,104,.13)}
  .media-card:hover .poster-play{opacity:1}
- .media-card:hover{z-index:4;transform:perspective(950px) translateY(-4px) scale(1.012) rotateX(var(--tilt-x,0deg)) rotateY(var(--tilt-y,0deg))}
+ .media-card:hover{z-index:4;transform:perspective(950px) translateY(-4px) scale(1.012)}
  .media-card:hover .poster-wrap::after{opacity:1}
  .save-card:hover{color:var(--rose-light);background:rgba(184,41,77,.42);border-color:rgba(255,213,224,.62);transform:scale(1.06)}
  .continue-card:hover{transform:translateY(-2px)}

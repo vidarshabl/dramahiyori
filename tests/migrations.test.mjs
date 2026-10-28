@@ -16,6 +16,7 @@ test("an existing 001 database upgrades in place and serves cast, galleries, and
   oldDatabase.exec("PRAGMA foreign_keys = ON; CREATE TABLE schema_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);");
   oldDatabase.exec(readFileSync(path.join(projectRoot,"db","migrations","001_initial.sql"),"utf8"));
   oldDatabase.prepare("INSERT INTO schema_migrations(id) VALUES(?)").run("001_initial");
+  oldDatabase.prepare("INSERT INTO site_settings(key,value) VALUES(?,?)").run("brand","DearDrama");
   oldDatabase.prepare("INSERT INTO titles(id,type,slug,title,published,featured) VALUES(?,?,?,?,1,1)").run("migration-title","series","migration-compatibility-audit","Migration Compatibility Audit");
   oldDatabase.prepare("UPDATE titles SET backdrop_url=? WHERE id=?").run("https://media.example.test/title-backdrop.jpg","migration-title");
   oldDatabase.close();
@@ -28,7 +29,8 @@ test("an existing 001 database upgrades in place and serves cast, galleries, and
     const {isBlobStorageConfigured}=await import("./lib/blob-storage.ts");
     const {persistTitleEpisodes}=await import("./lib/title-episodes.ts");
     const applied=await database.prepare("SELECT id FROM schema_migrations ORDER BY id").all();
-    assert.deepEqual(applied.map(row=>row.id),["001_initial","002_cast_gallery_media","003_media_associations","004_featured_order","005_homepage_slides"]);
+    assert.deepEqual(applied.map(row=>row.id),["001_initial","002_cast_gallery_media","003_media_associations","004_featured_order","005_homepage_slides","006_kverse_brand"]);
+    assert.equal((await database.prepare("SELECT value FROM site_settings WHERE key='brand'").get()).value,"Kverse");
     delete process.env.BLOB_READ_WRITE_TOKEN;delete process.env.BLOB_STORE_ID;delete process.env.VERCEL_OIDC_TOKEN;
     assert.equal(isBlobStorageConfigured(new Request("https://example.test",{headers:{"x-vercel-oidc-token":"runtime-oidc-token"}})),false);
     process.env.BLOB_STORE_ID="connected-store";

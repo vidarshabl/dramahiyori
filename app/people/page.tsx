@@ -2,14 +2,14 @@ import Link from "next/link";
 import { RemoteImage } from "@/components/RemoteImage";
 import { listCastMembers, listCastProfessions } from "@/lib/db";
 
-export const metadata={title:"Cast & Crew | DearDrama",description:"Browse cast and crew profiles connected to DearDrama titles."};
+export const metadata={title:"Cast & Crew | Kverse",description:"Browse cast and crew profiles connected to Kverse titles."};
 
 export default async function PeoplePage({searchParams}:{searchParams:Promise<{q?:string;profession?:string}>}) {
   const params=await searchParams,query=(params.q||"").trim(),profession=(params.profession||"").trim();
   const [people,professions]=await Promise.all([listCastMembers({query,profession}),listCastProfessions()]);
   return <main className="page-shell people-directory">
     <nav className="breadcrumbs" aria-label="Breadcrumb"><Link href="/">Home</Link><span aria-hidden="true">/</span><span>Cast &amp; crew</span></nav>
-    <header className="people-directory-heading"><span className="eyebrow">THE PEOPLE BEHIND THE STORIES</span><h1>Cast <i>&amp;</i> crew</h1><p>Discover the performers and creatives connected to published DearDrama stories.</p>
+    <header className="people-directory-heading"><span className="eyebrow">THE PEOPLE BEHIND THE STORIES</span><h1>Cast <i>&amp;</i> crew</h1><p>Discover the performers and creatives connected to published Kverse stories.</p>
       <form className="people-directory-filter" action="/people" method="get"><label>Search people<input type="search" name="q" defaultValue={query} placeholder="Name or profession"/></label><label>Profession<select name="profession" defaultValue={profession}><option value="">All professions</option>{professions.map(value=><option key={value} value={value}>{value}</option>)}</select></label><button className="button button-primary">Find people</button>{(query||profession)&&<Link className="button button-glass" href="/people">Clear</Link>}</form>
     </header>
     <section className="people-directory-results" aria-live="polite"><div className="section-heading"><div><span className="eyebrow">A CLOSER LOOK</span><h2>{query||profession?"Search results":"Featured people"}</h2></div><span>{people.length} {people.length===1?"profile":"profiles"}</span></div>
