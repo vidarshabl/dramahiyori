@@ -4,13 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { BatchImageUploader, type UploadedMedia } from "./BatchImageUploader";
 import { RemoteImage } from "./RemoteImage";
 
-type HomeTitle={id:string;title:string;slug:string;published:number};
+type HomeTitle={id:string;title:string;slug:string;published:number;backdrop_url?:string|null};
 type HomeSlide={id:string;titleId:string;title:string;slug:string;backdropUrl:string};
 type HomeAsset=Pick<UploadedMedia,"id"|"url"|"filename"|"role">;
 const MAX_SLIDES=50;
 
 function getBackdropPreview(value:string):string|null {
-  try {const url=new URL(value.trim());return url.protocol==="https:"&&url.hostname?url.toString():null;}
+  const candidate=value.trim();
+  if(/^\/drama-media\/[a-z0-9][a-z0-9._/-]*\.(?:jpe?g|png|webp|avif)$/i.test(candidate)&&!candidate.includes("..")&&!candidate.includes("\\")&&!candidate.includes("?")&&!candidate.includes("#"))return candidate;
+  try {const url=new URL(candidate);return url.protocol==="https:"&&url.hostname?url.toString():null;}
   catch {return null;}
 }
 
@@ -43,8 +45,17 @@ export function HomePhotoEditor({titles,assets,storageConfigured,onSaved,onAsset
   function addSlide() {
     const title=titles.find(item=>item.id===selectedTitle&&Number(item.published)===1);
     if(!ready||!title||slides.length>=MAX_SLIDES)return;
-    setSlides(current=>[...current,{id:crypto.randomUUID(),titleId:title.id,title:title.title,slug:title.slug,backdropUrl:""}]);
+    setSlides(current=>[...current,{id:crypto.randomUUID(),titleId:title.id,title:title.title,slug:title.slug,backdropUrl:title.backdrop_url||""}]);
     setSelectedTitle("");setError("");setMessage("");
+  }
+  function addAllSavedBackdrops() {
+    if(!ready)return;
+    const additions=publishedTitles
+      .filter(title=>Boolean(getBackdropPreview(title.backdrop_url||""))&&!slides.some(slide=>slide.titleId===title.id))
+      .slice(0,Math.max(0,MAX_SLIDES-slides.length))
+      .map(title=>({id:crypto.randomUUID(),titleId:title.id,title:title.title,slug:title.slug,backdropUrl:title.backdrop_url||""}));
+    if(!additions.length){setMessage("Every published drama backdrop is already in the slideshow, or no saved backdrops are available.");return;}
+    setSlides(current=>[...current,...additions]);setError("");setMessage(`${additions.length} saved drama photo${additions.length===1?"":"s"} added. Save the slideshow to publish them.`);
   }
   function updateBackdrop(id:string,backdropUrl:string) {
     setSlides(current=>current.map(slide=>slide.id===id?{...slide,backdropUrl}:slide));setMessage("");setError("");
@@ -57,7 +68,7 @@ export function HomePhotoEditor({titles,assets,storageConfigured,onSaved,onAsset
   async function saveSlides() {
     if(busy||!dirty)return;
     const missing=slides.findIndex(slide=>!getBackdropPreview(slide.backdropUrl));
-    if(missing!==-1){setError(`Choose a valid HTTPS photo for slide ${missing+1} before saving.`);return;}
+    if(missing!==-1){setError(`Choose a valid photo for slide ${missing+1} before saving.`);return;}
     setBusy(true);setError("");setMessage("");
     const controller=new AbortController();
     const timeout=window.setTimeout(()=>controller.abort(),30000);
@@ -87,6 +98,7 @@ export function HomePhotoEditor({titles,assets,storageConfigured,onSaved,onAsset
       <div className="home-slide-add-row">
         <label>Add a photo for a published title<select value={selectedTitle} onChange={event=>setSelectedTitle(event.target.value)} disabled={!ready||!publishedTitles.length||slides.length>=MAX_SLIDES}><option value="">Choose a title for this photo…</option>{publishedTitles.map(title=><option key={title.id} value={title.id}>{title.title}</option>)}</select></label>
         <button type="button" className="button button-glass" onClick={addSlide} disabled={!ready||!selectedTitle||slides.length>=MAX_SLIDES}>＋ Add photo</button>
+        <button type="button" className="button button-glass" onClick={addAllSavedBackdrops} disabled={!ready||loading||slides.length>=MAX_SLIDES||!publishedTitles.some(title=>getBackdropPreview(title.backdrop_url||"")&&!slides.some(slide=>slide.titleId===title.id))}>＋ Add all saved backdrops</button>
         {!publishedTitles.length&&<button type="button" className="text-link" onClick={onAddTitle}>Publish a title first →</button>}
       </div>
 
@@ -95,7 +107,7 @@ export function HomePhotoEditor({titles,assets,storageConfigured,onSaved,onAsset
         return <li key={slide.id} className="home-slide-card" onDragOver={event=>{if(dragging.current!==null)event.preventDefault();}} onDrop={event=>{event.preventDefault();const from=dragging.current;dragging.current=null;if(from!==null)moveSlide(from,index);}}>
           <div className="home-slide-preview">{preview?<RemoteImage src={preview} alt={`${slide.title} homepage photo`} sizes="(max-width: 650px) 100vw, 420px" fallbackLabel="Photo unavailable"/>:<div className="home-slide-placeholder"><span aria-hidden="true">✦</span><small>Choose or upload a photo</small></div>}<span className="home-slide-number">{String(index+1).padStart(2,"0")}</span></div>
           <div className="home-slide-content"><div className="home-slide-title-row"><div><span className="eyebrow">HOMEPAGE PHOTO {String(index+1).padStart(2,"0")}</span><h4>{slide.title}</h4><a href={`/title/${encodeURIComponent(slide.slug)}`} target="_blank" rel="noreferrer">Preview title ↗</a></div><div className="home-slide-order"><button type="button" draggable aria-label={`Drag photo ${index+1} to reorder`} onDragStart={event=>{dragging.current=index;event.dataTransfer.effectAllowed="move";event.dataTransfer.setData("text/plain",String(index));}} onDragEnd={()=>{dragging.current=null;}}>⠿</button><button type="button" disabled={index===0||busy} onClick={()=>moveSlide(index,index-1)} aria-label={`Move photo ${index+1} earlier`}>↑</button><button type="button" disabled={index===slides.length-1||busy} onClick={()=>moveSlide(index,index+1)} aria-label={`Move photo ${index+1} later`}>↓</button><button type="button" className="row-remove" disabled={busy} onClick={()=>{setSlides(current=>current.filter(item=>item.id!==slide.id));setMessage("");}} aria-label={`Remove photo ${index+1} from homepage`}>×</button></div></div>
-            <label>Photo URL<input type="url" list="home-media-urls" value={slide.backdropUrl} onChange={event=>updateBackdrop(slide.id,event.target.value)} placeholder="https://…"/></label>
+            <label>Photo URL<input type="text" list="home-media-urls" value={slide.backdropUrl} onChange={event=>updateBackdrop(slide.id,event.target.value)} placeholder="/drama-media/photo.jpg or https://…"/></label>
             <label>Drama opened by this photo<select aria-label={`Choose the drama for photo ${index+1}`} value={slide.titleId} onChange={event=>{const title=publishedTitles.find(item=>item.id===event.target.value);if(title)setSlides(current=>current.map(item=>item.id===slide.id?{...item,titleId:title.id,title:title.title,slug:title.slug}:item));}}>{publishedTitles.map(title=><option key={title.id} value={title.id}>{title.title}</option>)}</select></label>
             {!!assets.length&&<label>Choose an uploaded photo<select aria-label={`Choose an uploaded image for photo ${index+1}`} value={assets.some(asset=>asset.url===slide.backdropUrl)?slide.backdropUrl:""} onChange={event=>{if(event.target.value)updateBackdrop(slide.id,event.target.value);}}><option value="">Choose from media library…</option>{assets.map(asset=><option key={asset.id} value={asset.url}>{asset.filename} · {asset.role}</option>)}</select></label>}
           </div>

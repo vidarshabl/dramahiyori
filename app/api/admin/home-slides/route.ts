@@ -29,7 +29,7 @@ export async function PATCH(request:Request) {
     const backdropUrl=typeof slide?.backdropUrl==="string"?slide.backdropUrl.trim():"";
     if(!/^[a-z\d_-]{1,100}$/i.test(id)||ids.has(id))return badRequest(`Check homepage photo ${index+1}; each slide needs a unique ID.`);
     if(!titleId||titleId.length>100)return badRequest(`Choose a published title for homepage photo ${index+1}.`);
-    if(!backdropUrl||!isValidMediaUrl(backdropUrl))return badRequest(`Add a valid HTTPS photo URL for homepage photo ${index+1}.`);
+    if(!backdropUrl||!isValidMediaUrl(backdropUrl))return badRequest(`Add a valid photo URL for homepage photo ${index+1}.`);
     ids.add(id);slides.push({id,titleId,backdropUrl});
   }
 
