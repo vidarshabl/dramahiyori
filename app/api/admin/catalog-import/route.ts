@@ -3,7 +3,7 @@ import {currentAdmin} from "@/lib/auth";
 import {badRequest,json,sameOriginOrReject} from "@/lib/api";
 import {database} from "@/lib/db";
 import {invalidatePublicCatalogCache} from "@/lib/catalog";
-import {providedDramaCatalog} from "@/data/provided-drama-catalog";
+import {providedDramaCatalog} from "@/lib/provided-drama-catalog";
 
 export const runtime="nodejs";
 
