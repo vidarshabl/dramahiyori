@@ -34,16 +34,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <head>
-        {/* Monetag Multitag Script */}
-        <Script
-          src="https://quge5.com/88/tag.min.js"
-          data-zone="302902"
-          strategy="afterInteractive"
-        />
-      </head>
       <body>
         <PublicChrome>{children}</PublicChrome>
+
+        {/* Monetag In-Page Push Banner Script */}
+        <Script
+          src="https://nap5k.com/tag.min.js"
+          data-zone="12139234"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );
