@@ -59,6 +59,13 @@ test("administrator imports the supplied drama catalog idempotently with static 
  const once=await request("/api/admin/titles",{cookie:adminCookie});assert.equal(once.data.items.filter(item=>item.slug==="queen-of-tears").length,1);
 });
 
+test("homepage uses the KVERSE navbar wordmark and renders its bundled hero backdrop",async()=>{
+ const response=await fetch(base+"/");assert.equal(response.status,200);
+ const html=await response.text(),header=html.match(/<header\b[\s\S]*?<\/header>/)?.[0]||"";
+ assert.match(header,/KVERSE/);assert.doesNotMatch(header,/deardrama|stories that stay/i);
+ assert.match(html,/business-proposal-backdrop\.jpg/);
+});
+
 test("admin creates and edits content; title and genre filters use saved data",async()=>{
  slug="test-title-"+randomUUID().slice(0,8);
  const body={title:"Test Spring Letters",type:"series",slug,synopsis:"A test record for CRUD verification.",releaseYear:2026,country:"South Korea",status:"ongoing",genres:["Romance","Test Genre"],published:true,featured:false,posterUrl:"/drama-media/queen-of-tears-poster.jpg",backdropUrl:"/drama-media/queen-of-tears-backdrop.jpg",videoUrl:"https://ia800.us.archive.org/download/test/video.mp4",gallery:[{url:"https://ia800.us.archive.org/download/test/still.jpg",caption:"Test still",attribution:"Test collection"}],episodes:[{title:"Pilot",synopsis:"Test episode.",durationMinutes:28,videoUrl:"https://ia800.us.archive.org/download/test/episode.mp4"}]};

@@ -6,17 +6,15 @@ import { ReactNode } from "react";
 import { CookieConsent } from "@/components/CookieConsent";
 
 type User={id:string;email:string;display_name:string;role:string};
-function Wordmark({brand,tagline,className=""}:{brand:string;tagline:string;className?:string}){return <Link href="/" className={"brand "+className} aria-label={brand+" home"}><span className="brand-mark">✦</span>{brand.trim().toLowerCase()==="deardrama"?<span>dear<span className="brand-script">drama</span><small>{tagline}</small></span>:<span className="custom-wordmark">{brand}<small>{tagline}</small></span>}</Link>}
+function Wordmark({brand,tagline,className=""}:{brand:string;tagline?:string;className?:string}){return <Link href="/" className={"brand "+className} aria-label={brand+" home"}><span className="brand-mark">✦</span>{brand.trim().toLowerCase()==="deardrama"?<span>dear<span className="brand-script">drama</span>{tagline&&<small>{tagline}</small>}</span>:<span className="custom-wordmark">{brand}{tagline&&<small>{tagline}</small>}</span>}</Link>}
 export function SiteHeader() {
   const [user,setUser]=useState<User|null>(null), [open,setOpen]=useState(false), [mobileMenuOpen,setMobileMenuOpen]=useState(false),[accountMenuOpen,setAccountMenuOpen]=useState(false), [query,setQuery]=useState(""),[scrolled,setScrolled]=useState(false);
   const [currentSearch,setCurrentSearch]=useState("");
-  const [brand,setBrand]=useState("DearDrama"),[tagline,setTagline]=useState("stories that stay");
   const pathname=usePathname(), router=useRouter();
   const navLinks=[{href:"/",label:"Home"},{href:"/browse?type=series",label:"K-Dramas"},{href:"/browse?type=movie",label:"Movies"},{href:"/browse?status=ongoing",label:"Ongoing"},{href:"/genres",label:"Genres"},{href:"/people",label:"Cast & crew"},{href:"/new",label:"New releases"}];
   const mobileLinks=[{href:"/",label:"Home"},{href:"/browse?type=series",label:"K-Dramas"},{href:"/browse?type=movie",label:"Movies"},{href:"/genres",label:"Genres & moods"},{href:"/people",label:"Cast & crew"},{href:"/new",label:"New releases"},{href:"/watchlist",label:"My watchlist"}];
   function isActive(href:string){const [path,queryString=""]=href.split("?");if(pathname!==path)return false;if(!queryString)return true;const active=new URLSearchParams(currentSearch);return Array.from(new URLSearchParams(queryString)).every(([key,value])=>active.get(key)===value);}
   useEffect(()=>{fetch("/api/auth/me").then(r=>r.json()).then(d=>setUser(d.user)).catch(()=>{});},[pathname]);
-  useEffect(()=>{fetch("/api/settings").then(r=>r.json()).then(d=>{if(d.settings?.brand)setBrand(d.settings.brand);if(d.settings?.tagline)setTagline(d.settings.tagline);}).catch(()=>{});},[]);
   useEffect(()=>{const onScroll=()=>setScrolled(window.scrollY>26);window.addEventListener("scroll",onScroll,{passive:true});onScroll();return()=>window.removeEventListener("scroll",onScroll);},[]);
   useEffect(()=>{setCurrentSearch(window.location.search);},[pathname]);
   useEffect(()=>{const syncSearch=()=>setCurrentSearch(window.location.search);window.addEventListener("popstate",syncSearch);return()=>window.removeEventListener("popstate",syncSearch);},[]);
@@ -26,7 +24,7 @@ export function SiteHeader() {
   async function logout() {await fetch("/api/auth/logout",{method:"POST"});setUser(null);setAccountMenuOpen(false);setMobileMenuOpen(false);router.push("/");router.refresh();}
   return <>
     <header className={"site-header"+(scrolled?" is-scrolled":"")}><div className="header-inner">
-      <Wordmark brand={brand} tagline={tagline}/>
+      <Wordmark brand="KVERSE" className="brand-kverse"/>
       <nav className="desktop-nav" aria-label="Main navigation">
         {navLinks.map(link=><Link key={link.href} href={link.href} className={isActive(link.href)?"is-active":undefined} aria-current={isActive(link.href)?"page":undefined} onClick={()=>setCurrentSearch(link.href.includes("?")?"?"+link.href.split("?")[1]:"")}>{link.label}</Link>)}
       </nav>

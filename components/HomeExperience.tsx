@@ -11,9 +11,14 @@ import { IMAGE_BLUR_DATA_URL } from "@/lib/image-placeholder";
 const heroSlideKey=(item:TitleSummary)=>(item as TitleSummary&{slide_id?:string}).slide_id||item.id;
 const artFallback="radial-gradient(ellipse at 72% 25%,rgba(232,62,104,.2),transparent 36%),linear-gradient(135deg,#211329,#11111a 70%,#08080d)";
 
+function heroImageSource(value:string) {
+ const candidate=value.trim();
+ if(candidate.startsWith("/drama-media/")&&!candidate.includes("..")&&!candidate.includes("?")&&!candidate.includes("#"))return candidate;
+ try{const url=new URL(candidate);return url.protocol==="https:"||url.protocol==="http:"?url.toString():"";}catch{return "";}
+}
+
 function HeroArtwork({item,className,priority=false}:{item:TitleSummary;className:string;priority?:boolean}) {
- let source="";
- try{const url=new URL(item.backdrop_url);if(url.protocol==="https:"||url.protocol==="http:")source=url.toString();}catch{}
+ const source=heroImageSource(item.backdrop_url||"");
  return <div className={className} aria-hidden="true" style={{backgroundImage:artFallback}}>{source&&<Image fill src={source} alt="" sizes="100vw" quality={90} priority={priority} loading={priority?undefined:"lazy"} placeholder="blur" blurDataURL={IMAGE_BLUR_DATA_URL} unoptimized={source.startsWith("http:")} className="hero-art-image"/>}</div>;
 }
 

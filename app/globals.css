@@ -22,6 +22,11 @@ button{color:inherit}
 .brand-auth-wordmark small{width:100%;font:500 8px var(--sans);letter-spacing:2px;text-transform:uppercase;color:var(--muted-light);margin-top:5px}
 .brand small{width:100%;font:500 8px var(--sans);letter-spacing:2px;text-transform:uppercase;color:var(--muted-light);margin-top:4px}
 .custom-wordmark{font:500 20px var(--serif);letter-spacing:-.5px}
+.brand-kverse{gap:8px;animation:kverse-logo-enter .72s var(--ease) both}
+.brand-kverse .brand-mark{font-size:17px}
+.brand-kverse .custom-wordmark{font:700 17px/1 var(--sans);letter-spacing:.17em;color:#fff;text-shadow:0 0 16px rgba(255,255,255,.08);transition:color .22s ease,text-shadow .22s ease}
+.brand-kverse:hover .custom-wordmark{color:#ffe8ef;text-shadow:0 0 19px rgba(232,62,104,.36)}
+.brand-kverse:hover .brand-mark{color:var(--rose-light);filter:drop-shadow(0 0 12px rgba(232,62,104,.65))}
 .desktop-nav{display:flex;align-items:center;gap:clamp(14px,2vw,29px);margin-left:auto}
 .desktop-nav a,.auth-links a{position:relative;white-space:nowrap;font-size:12px;color:rgba(248,245,247,.73);transition:color .22s ease}
 .desktop-nav a::after{content:"";position:absolute;left:0;right:100%;bottom:-9px;height:1px;background:linear-gradient(90deg,var(--rose),var(--gold));transition:right .24s var(--ease)}
@@ -418,13 +423,13 @@ button{color:inherit}
 }
 @media(max-width:650px){
  .header-inner{height:66px;padding:0 15px;gap:9px}.site-header{margin-bottom:-66px}
- .brand{font-size:22px}.brand-script{font-size:29px}.brand-auth-wordmark strong{font-size:23px}.brand-auth-wordmark em{font-size:28px}.brand-mark{font-size:18px}.site-header .brand small{display:none}
+ .brand{font-size:22px}.brand-script{font-size:29px}.brand-auth-wordmark strong{font-size:23px}.brand-auth-wordmark em{font-size:28px}.brand-mark{font-size:18px}.brand-kverse .custom-wordmark{font-size:16px;letter-spacing:.14em}.site-header .brand small{display:none}
  .header-actions{gap:2px}.icon-button{width:42px;height:42px}.auth-links{display:none}
  .watchlist-link{display:none}.mobile-nav{top:65px;padding-left:16px;padding-right:16px}
  .header-search{top:60px;right:10px}
  .hero{height:auto;min-height:0;max-height:none;padding:calc(66px + min(56.25vw,280px)) 22px 92px;background-position:61% center;align-items:flex-start}
- .hero-art{top:66px;right:0;bottom:auto;left:0;height:min(56.25vw,280px);min-height:0;max-height:none;background-position:center top;animation:none}
- .hero-art-image{object-fit:contain;object-position:center top}
+ .hero-art{top:66px;right:0;bottom:auto;left:0;height:min(56.25vw,280px);aspect-ratio:16/9;min-height:0;max-height:none;background-position:center;animation:none}
+ .hero-art-image{object-fit:contain;object-position:center}
  .hero-art-incoming{animation:hero-art-cinematic-reveal .95s cubic-bezier(.2,.72,.2,1) both}
  .hero:after{background:radial-gradient(ellipse at 72% 25%,rgba(232,62,104,.1),transparent 37%),linear-gradient(0deg,#08080d 0%,rgba(8,8,13,.94) 30%,rgba(8,8,13,.45) 64%,rgba(8,8,13,.18) 100%)}
  .hero-copy{width:100%;max-width:520px;margin:0;z-index:2}
@@ -567,6 +572,7 @@ button{color:inherit}
 @keyframes hero-art-cinematic-reveal{from{opacity:0;clip-path:inset(0 100% 0 0)}to{opacity:1;clip-path:inset(0)}}
 @keyframes hero-art-crossfade-out{from{opacity:1}to{opacity:0}}
 @keyframes image-skeleton{from{background-position:180% 0,0 0}to{background-position:-80% 0,0 0}}
+@keyframes kverse-logo-enter{from{opacity:0;transform:translateX(-7px)}to{opacity:1;transform:translateX(0)}}
 @keyframes brand-glint{0%,84%,100%{transform:translateY(-5px) rotate(0);opacity:.88}89%{transform:translateY(-6px) rotate(18deg);opacity:1}94%{transform:translateY(-5px) rotate(-8deg);opacity:.94}}
 @keyframes search-panel-in{from{opacity:0;transform:translateY(-6px) scale(.99)}to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes mobile-menu-enter{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
@@ -668,6 +674,8 @@ button{color:inherit}
 @media(hover:hover) and (pointer:fine){.cast-card:hover{transform:translateY(-3px);background:rgba(255,255,255,.035)}.cast-card:hover img,.gallery-thumb:hover img{transform:scale(1.045)}.gallery-thumb:hover>span{opacity:1}.person-credit:hover{transform:translateY(-2px);background:rgba(232,62,104,.055);border-color:rgba(232,62,104,.24)}}
 @media(prefers-reduced-motion:reduce){
  *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+ .brand-kverse{animation:none!important}
+ .brand-kverse:hover .brand-mark{filter:none!important}
  .hero-art,.brand-mark{animation:none!important;transform:none!important}
  .hero-copy>*{opacity:1!important;animation:none!important;filter:none!important;transform:none!important}
  .scroll-reveal{opacity:1!important;transform:none!important;transition:none!important}
