@@ -19,12 +19,12 @@ export async function POST(request:Request) {
         const previous=await tx.prepare("SELECT id FROM titles WHERE slug=?").get(drama.slug) as {id:string}|undefined;
         const titleId=previous?.id||randomUUID();
         if(previous) {
-          await tx.prepare(`UPDATE titles SET type='series',title=?,synopsis=?,release_year=?,country='South Korea',status='completed',runtime_minutes=?,imdb_rating=?,imdb_rating_is_estimate=?,total_episodes=?,total_runtime_minutes=?,poster_url=CASE WHEN ?<>'' THEN ? ELSE poster_url END,backdrop_url=CASE WHEN ?<>'' THEN ? ELSE backdrop_url END,published=1,demo=0,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+          await tx.prepare(`UPDATE titles SET type='series',catalog_type='series',title=?,synopsis=?,release_year=?,country='South Korea',status='completed',runtime_minutes=?,imdb_rating=?,imdb_rating_is_estimate=?,total_episodes=?,total_runtime_minutes=?,poster_url=CASE WHEN ?<>'' THEN ? ELSE poster_url END,backdrop_url=CASE WHEN ?<>'' THEN ? ELSE backdrop_url END,published=1,demo=0,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
             .run(drama.title,drama.synopsis,drama.releaseYear,drama.runtimeMinutes,drama.imdbRating,drama.imdbRatingIsEstimate?1:0,drama.totalEpisodes,drama.totalRuntimeMinutes,drama.posterUrl,drama.posterUrl,drama.backdropUrl,drama.backdropUrl,titleId);
           updated++;
         } else {
-          await tx.prepare(`INSERT INTO titles(id,type,slug,title,synopsis,release_year,country,status,runtime_minutes,imdb_rating,imdb_rating_is_estimate,total_episodes,total_runtime_minutes,poster_url,backdrop_url,published,featured,demo)
-            VALUES(?,'series',?,?,?,?,'South Korea','completed',?,?,?,?,?,?,?,1,0,0)`)
+          await tx.prepare(`INSERT INTO titles(id,type,catalog_type,slug,title,synopsis,release_year,country,status,runtime_minutes,imdb_rating,imdb_rating_is_estimate,total_episodes,total_runtime_minutes,poster_url,backdrop_url,published,featured,demo)
+            VALUES(?,'series','series',?,?,?,?,'South Korea','completed',?,?,?,?,?,?,?,1,0,0)`)
             .run(titleId,drama.slug,drama.title,drama.synopsis,drama.releaseYear,drama.runtimeMinutes,drama.imdbRating,drama.imdbRatingIsEstimate?1:0,drama.totalEpisodes,drama.totalRuntimeMinutes,drama.posterUrl,drama.backdropUrl);
           created++;
         }

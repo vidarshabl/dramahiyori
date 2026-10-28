@@ -2,7 +2,7 @@ import { revalidateTag, unstable_cache } from "next/cache";
 import { database, getTitle as loadTitle, listHomepageSlides as loadHomepageSlides, listTitles as loadTitles } from "@/lib/db";
 
 const CATALOG_TAG = "public-catalog";
-const TITLE_FILTER_KEYS = ["q","genre","country","year","type","status","sort","page","limit"] as const;
+const TITLE_FILTER_KEYS = ["q","genre","country","year","type","status","sort","page","limit","hasSinhalaSubtitles"] as const;
 
 const cachedTitleLists = unstable_cache(
   async (filters: Record<string,string|undefined>) => loadTitles(filters),

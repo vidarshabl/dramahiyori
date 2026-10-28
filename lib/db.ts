@@ -105,7 +105,7 @@ class LocalProvider implements Provider {
   }
 }
 
-const MIGRATIONS = ["001_initial", "002_cast_gallery_media", "003_media_associations", "004_featured_order", "005_homepage_slides", "006_kverse_brand", "007_deardrama_brand", "008_title_catalog_metrics"] as const;
+const MIGRATIONS = ["001_initial", "002_cast_gallery_media", "003_media_associations", "004_featured_order", "005_homepage_slides", "006_kverse_brand", "007_deardrama_brand", "008_title_catalog_metrics", "009_streaming_foundation"] as const;
 
 function migrationSql(migration: typeof MIGRATIONS[number]): string {
   const file = path.join(process.cwd(), "db", "migrations", `${migration}.sql`);
@@ -291,34 +291,35 @@ export async function seedDemoData(): Promise<void> {
 }
 
 export type Title = {
-  id:string; type:"movie"|"series"; slug:string; title:string; alternative_title:string; synopsis:string; release_year:number|null;
-  country:string; status:"ongoing"|"completed"|"upcoming"; runtime_minutes:number|null; imdb_rating:number|null; imdb_rating_is_estimate:number; total_episodes:number|null; total_runtime_minutes:number|null; poster_url:string; backdrop_url:string;
+  id:string; type:"movie"|"series"|"variety"; slug:string; title:string; alternative_title:string; sinhala_title:string; synopsis:string; release_year:number|null;
+  country:string; air_day:string; has_sinhala_subtitles:number; status:"ongoing"|"completed"|"upcoming"; runtime_minutes:number|null; imdb_rating:number|null; imdb_rating_is_estimate:number; total_episodes:number|null; total_runtime_minutes:number|null; poster_url:string; backdrop_url:string;
   content_rating:string; subtitle_languages:string; video_url:string; published:number; featured:number; featured_order:number; demo:number;
   genres?:string[]; episode_count?:number; season_count?:number; has_playable_source?:number; first_playable_episode_id?:string|null;
 };
 
-export type TitleSummary = Pick<Title,"id"|"type"|"slug"|"title"|"alternative_title"|"synopsis"|"release_year"|"country"|"status"|"poster_url"|"backdrop_url"|"featured"|"demo"> & {
+export type TitleSummary = Pick<Title,"id"|"type"|"slug"|"title"|"alternative_title"|"sinhala_title"|"has_sinhala_subtitles"|"synopsis"|"release_year"|"country"|"air_day"|"status"|"poster_url"|"backdrop_url"|"featured"|"demo"> & {
   genres?:string[];has_playable_source:number;first_playable_episode_id:string|null;
 };
 
 export type GalleryImage = {id:string;image_url:string;caption:string;attribution:string;sort_order:number};
 export type CastCredit = {id:string;cast_member_id:string;slug:string;name:string;portrait_url:string;character_name:string;role_type:"cast"|"director"|"writer"|"producer";sort_order:number};
-export type CastMember = {id:string;slug:string;name:string;biography:string;nationality:string;profession:string;portrait_url:string;created_at:string;updated_at:string;gallery?:GalleryImage[];credits?:Array<CastCredit & {title_id:string;title_slug:string;title:string;title_type:"movie"|"series";release_year:number|null;poster_url:string}>};
+export type CastMember = {id:string;slug:string;name:string;biography:string;nationality:string;profession:string;portrait_url:string;created_at:string;updated_at:string;gallery?:GalleryImage[];credits?:Array<CastCredit & {title_id:string;title_slug:string;title:string;title_type:"movie"|"series"|"variety";release_year:number|null;poster_url:string}>};
 export type CastDirectoryItem = Pick<CastMember,"id"|"slug"|"name"|"profession"|"nationality"|"portrait_url"> & { title_count:number; known_for:string|null };
 
 export async function listTitles(filters: Record<string,string|undefined> = {}): Promise<TitleSummary[]> {
   const where = ["t.published=1"];
   const params: (string|number)[] = [];
   if (filters.sort === "featured") where.push("t.featured=1");
-  for (const [key,column] of [["type","t.type"],["country","t.country"],["status","t.status"],["year","t.release_year"]] as const) {
+  for (const [key,column] of [["type","t.catalog_type"],["country","t.country"],["status","t.status"],["year","t.release_year"]] as const) {
     if (filters[key]) { where.push(`${column}=?`); params.push(key === "year" ? Number(filters[key]) : filters[key]!); }
   }
   if (filters.genre) { where.push("EXISTS (SELECT 1 FROM title_genres tg JOIN genres g ON g.id=tg.genre_id WHERE tg.title_id=t.id AND (g.slug=? OR lower(g.name)=lower(?)))"); params.push(slugify(filters.genre),filters.genre); }
-  if (filters.q?.trim()) { where.push("(lower(t.title) LIKE ? OR lower(t.alternative_title) LIKE ?)"); const query = `%${filters.q.trim().toLowerCase()}%`; params.push(query,query); }
+  if (filters.hasSinhalaSubtitles === "true") where.push("t.has_sinhala_subtitles=1");
+  if (filters.q?.trim()) { where.push("(lower(t.title) LIKE ? OR lower(t.alternative_title) LIKE ? OR t.sinhala_title LIKE ? OR EXISTS (SELECT 1 FROM title_cast tc JOIN cast_members cm ON cm.id=tc.cast_member_id WHERE tc.title_id=t.id AND lower(cm.name) LIKE ?))"); const query = `%${filters.q.trim().toLowerCase()}%`; params.push(query,query,query,query); }
   if (filters.sort === "popular") where.push("EXISTS (SELECT 1 FROM viewing_history vh WHERE vh.title_id=t.id AND vh.viewed_at>=datetime('now','-30 days'))");
   const sort = filters.sort === "alpha" ? "t.title COLLATE NOCASE ASC" : filters.sort === "oldest" ? "t.release_year ASC,t.title" : filters.sort === "popular" ? "(SELECT COUNT(*) FROM viewing_history vh WHERE vh.title_id=t.id AND vh.viewed_at>=datetime('now','-30 days')) DESC,t.title" : filters.sort === "featured" ? "t.featured_order ASC,t.updated_at DESC,t.title" : "t.created_at DESC,t.title";
   const page = Math.max(1,Number(filters.page || 1)); const limit = Math.min(48,Math.max(1,Number(filters.limit || 24)));
-  const rows = await database.prepare(`SELECT t.id,t.type,t.slug,t.title,t.alternative_title,t.synopsis,t.release_year,t.country,t.status,t.poster_url,t.backdrop_url,t.featured,t.demo,
+  const rows = await database.prepare(`SELECT t.id,t.catalog_type AS type,t.slug,t.title,t.alternative_title,t.sinhala_title,t.has_sinhala_subtitles,t.air_day,t.synopsis,t.release_year,t.country,t.status,t.poster_url,t.backdrop_url,t.featured,t.demo,
     CASE WHEN trim(t.video_url)<>'' OR EXISTS (SELECT 1 FROM episodes pe JOIN seasons ps ON ps.id=pe.season_id WHERE ps.title_id=t.id AND trim(pe.video_url)<>'') THEN 1 ELSE 0 END AS has_playable_source,
     (SELECT pe.id FROM episodes pe JOIN seasons ps ON ps.id=pe.season_id WHERE ps.title_id=t.id AND trim(pe.video_url)<>'' ORDER BY ps.season_number,pe.episode_number LIMIT 1) AS first_playable_episode_id
     FROM titles t WHERE ${where.join(" AND ")} ORDER BY ${sort} LIMIT ? OFFSET ?`).all(...params,limit,(page-1)*limit) as TitleSummary[];
@@ -333,7 +334,7 @@ export type HomepageSlide = TitleSummary & {slide_id:string};
 
 export async function listHomepageSlides(): Promise<HomepageSlide[]> {
   const rows=await database.prepare(`SELECT hs.id AS slide_id,hs.sort_order AS slide_order,hs.backdrop_url AS slide_backdrop_url,
-    t.id,t.type,t.slug,t.title,t.alternative_title,t.synopsis,t.release_year,t.country,t.status,t.poster_url,t.featured,t.demo,
+    t.id,t.catalog_type AS type,t.slug,t.title,t.alternative_title,t.sinhala_title,t.has_sinhala_subtitles,t.air_day,t.synopsis,t.release_year,t.country,t.status,t.poster_url,t.featured,t.demo,
     CASE WHEN trim(t.video_url)<>'' OR EXISTS (SELECT 1 FROM episodes pe JOIN seasons ps ON ps.id=pe.season_id WHERE ps.title_id=t.id AND trim(pe.video_url)<>'') THEN 1 ELSE 0 END AS has_playable_source,
     (SELECT pe.id FROM episodes pe JOIN seasons ps ON ps.id=pe.season_id WHERE ps.title_id=t.id AND trim(pe.video_url)<>'' ORDER BY ps.season_number,pe.episode_number LIMIT 1) AS first_playable_episode_id
     FROM homepage_slides hs JOIN titles t ON t.id=hs.title_id
@@ -351,12 +352,13 @@ async function getGenres(titleId:string): Promise<string[]> {
 }
 
 export async function getTitle(slug:string) {
-  const row = await database.prepare("SELECT * FROM titles WHERE slug=? AND published=1").get(slug) as Title|undefined;
-  if (!row) return null;
+  const rawRow = await database.prepare("SELECT * FROM titles WHERE slug=? AND published=1").get(slug) as (Title & {catalog_type?:Title["type"]})|undefined;
+  if (!rawRow) return null;
+  const row={...rawRow,type:rawRow.catalog_type||rawRow.type} as Title;
   const seasons = await database.prepare("SELECT id,season_number,name FROM seasons WHERE title_id=? ORDER BY season_number").all(row.id) as {id:string;season_number:number;name:string}[];
   const fullSeasons:any[] = await Promise.all(seasons.map(async (season) => {
-    const episodes = await database.prepare("SELECT id,episode_number,title,synopsis,thumbnail_url,duration_minutes,video_url FROM episodes WHERE season_id=? ORDER BY episode_number").all(season.id) as {id:string;episode_number:number;title:string;synopsis:string;thumbnail_url:string;duration_minutes:number|null;video_url:string}[];
-    return {...season,episodes:await Promise.all(episodes.map(async (episode) => ({...episode,subtitles:(await database.prepare("SELECT language,label,file_url,kind FROM subtitle_tracks WHERE episode_id=?").all(episode.id)).map(track=>({...track}))})))};
+    const episodes = await database.prepare("SELECT id,episode_number,title,synopsis,thumbnail_url,duration_minutes,video_url,air_date,publish_at,published,created_at FROM episodes WHERE season_id=? ORDER BY episode_number").all(season.id) as {id:string;episode_number:number;title:string;synopsis:string;thumbnail_url:string;duration_minutes:number|null;video_url:string;air_date:string|null;publish_at:string|null;published:number;created_at:string}[];
+    return {...season,episodes:await Promise.all(episodes.map(async (episode) => ({...episode,subtitles:(await database.prepare("SELECT language,label,vtt_url AS file_url,kind,is_default,timing_offset FROM content_subtitle_tracks WHERE episode_id=? ORDER BY is_default DESC,language").all(episode.id)).map(track=>({...track}))})))};
   }));
   const [genres,galleryRows,castRows] = await Promise.all([
     getGenres(row.id),
@@ -371,7 +373,7 @@ export async function getCastMember(slug:string):Promise<CastMember|null> {
   if(!member)return null;
   const [galleryRows,credits]=await Promise.all([
     database.prepare("SELECT id,image_url,caption,attribution,sort_order FROM cast_gallery WHERE cast_member_id=? ORDER BY sort_order,id").all(member.id) as Promise<GalleryImage[]>,
-    database.prepare("SELECT tc.id,tc.cast_member_id,tc.character_name,tc.role_type,tc.sort_order,t.id AS title_id,t.slug AS title_slug,t.title,t.type AS title_type,t.release_year,t.poster_url FROM title_cast tc JOIN titles t ON t.id=tc.title_id WHERE tc.cast_member_id=? AND t.published=1 ORDER BY tc.sort_order,t.release_year DESC,t.title COLLATE NOCASE").all(member.id) as Promise<CastMember["credits"]>,
+    database.prepare("SELECT tc.id,tc.cast_member_id,tc.character_name,tc.role_type,tc.sort_order,t.id AS title_id,t.slug AS title_slug,t.title,t.catalog_type AS title_type,t.release_year,t.poster_url FROM title_cast tc JOIN titles t ON t.id=tc.title_id WHERE tc.cast_member_id=? AND t.published=1 ORDER BY tc.sort_order,t.release_year DESC,t.title COLLATE NOCASE").all(member.id) as Promise<CastMember["credits"]>,
   ]);
   return {...member,gallery:galleryRows.map(image=>({...image})),credits:credits||[]};
 }

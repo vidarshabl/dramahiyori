@@ -26,13 +26,18 @@ CREATE INDEX IF NOT EXISTS auth_attempts_window_idx ON auth_attempts(email_key,a
 
 CREATE TABLE IF NOT EXISTS titles (
   id TEXT PRIMARY KEY,
+  -- `type` is retained for backwards compatibility. `catalog_type` is the public enum.
   type TEXT NOT NULL CHECK (type IN ('movie','series')),
+  catalog_type TEXT NOT NULL DEFAULT 'series' CHECK (catalog_type IN ('series','movie','variety')),
   slug TEXT NOT NULL UNIQUE,
   title TEXT NOT NULL,
   alternative_title TEXT NOT NULL DEFAULT '',
+  sinhala_title TEXT NOT NULL DEFAULT '',
   synopsis TEXT NOT NULL DEFAULT '',
   release_year INTEGER,
   country TEXT NOT NULL DEFAULT '',
+  air_day TEXT NOT NULL DEFAULT '',
+  has_sinhala_subtitles INTEGER NOT NULL DEFAULT 0 CHECK (has_sinhala_subtitles IN (0,1)),
   status TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('ongoing','completed','upcoming')),
   runtime_minutes INTEGER,
   imdb_rating REAL CHECK (imdb_rating IS NULL OR (imdb_rating >= 0 AND imdb_rating <= 10)),
@@ -81,8 +86,13 @@ CREATE TABLE IF NOT EXISTS episodes (
   thumbnail_url TEXT NOT NULL DEFAULT '',
   duration_minutes INTEGER,
   video_url TEXT NOT NULL DEFAULT '',
+  air_date TEXT,
+  publish_at TEXT,
+  published INTEGER NOT NULL DEFAULT 1 CHECK (published IN (0,1)),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(season_id,episode_number)
 );
+CREATE INDEX IF NOT EXISTS episodes_publish_idx ON episodes(published,publish_at,season_id,episode_number);
 CREATE TABLE IF NOT EXISTS subtitle_tracks (
   id TEXT PRIMARY KEY,
   episode_id TEXT NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,
@@ -213,3 +223,103 @@ CREATE UNIQUE INDEX IF NOT EXISTS media_usage_episode_idx ON media_asset_usages(
 CREATE INDEX IF NOT EXISTS media_usage_asset_idx ON media_asset_usages(media_asset_id);
 CREATE INDEX IF NOT EXISTS media_usage_title_order_idx ON media_asset_usages(title_id,role,sort_order);
 CREATE INDEX IF NOT EXISTS media_usage_cast_order_idx ON media_asset_usages(cast_member_id,role,sort_order);
+
+-- Canonical extensible subtitle table; legacy episode-only tracks remain available for migration.
+CREATE TABLE IF NOT EXISTS content_subtitle_tracks (
+  id TEXT PRIMARY KEY,
+  title_id TEXT REFERENCES titles(id) ON DELETE CASCADE,
+  episode_id TEXT REFERENCES episodes(id) ON DELETE CASCADE,
+  language TEXT NOT NULL,
+  label TEXT NOT NULL,
+  vtt_url TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'subtitles' CHECK (kind IN ('subtitles','captions')),
+  is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0,1)),
+  timing_offset REAL NOT NULL DEFAULT 0 CHECK (timing_offset BETWEEN -60 AND 60),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CHECK ((title_id IS NOT NULL) + (episode_id IS NOT NULL) = 1)
+);
+CREATE INDEX IF NOT EXISTS content_subtitles_title_idx ON content_subtitle_tracks(title_id,language,is_default);
+CREATE INDEX IF NOT EXISTS content_subtitles_episode_idx ON content_subtitle_tracks(episode_id,language,is_default);
+CREATE TABLE IF NOT EXISTS video_sources (
+  id TEXT PRIMARY KEY,
+  title_id TEXT REFERENCES titles(id) ON DELETE CASCADE,
+  episode_id TEXT REFERENCES episodes(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('hls','mp4','embed')),
+  quality TEXT NOT NULL DEFAULT 'auto' CHECK (quality IN ('auto','480p','720p','1080p')),
+  url TEXT NOT NULL,
+  priority INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive')),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CHECK ((title_id IS NOT NULL) + (episode_id IS NOT NULL) = 1)
+);
+CREATE INDEX IF NOT EXISTS video_sources_title_idx ON video_sources(title_id,status,priority);
+CREATE INDEX IF NOT EXISTS video_sources_episode_idx ON video_sources(episode_id,status,priority);
+CREATE TABLE IF NOT EXISTS download_links (
+  id TEXT PRIMARY KEY,
+  title_id TEXT REFERENCES titles(id) ON DELETE CASCADE,
+  episode_id TEXT REFERENCES episodes(id) ON DELETE CASCADE,
+  quality TEXT NOT NULL CHECK (quality IN ('480p','720p','1080p','subtitle')),
+  size_mb REAL CHECK (size_mb IS NULL OR size_mb BETWEEN 0 AND 1000000),
+  host_label TEXT NOT NULL DEFAULT '',
+  url TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive')),
+  clicks INTEGER NOT NULL DEFAULT 0 CHECK (clicks >= 0),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CHECK ((title_id IS NOT NULL) + (episode_id IS NOT NULL) = 1)
+);
+CREATE INDEX IF NOT EXISTS download_links_title_idx ON download_links(title_id,status,quality);
+CREATE INDEX IF NOT EXISTS download_links_episode_idx ON download_links(episode_id,status,quality);
+CREATE TABLE IF NOT EXISTS download_clicks (
+  id TEXT PRIMARY KEY,
+  download_link_id TEXT NOT NULL REFERENCES download_links(id) ON DELETE CASCADE,
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS download_clicks_time_idx ON download_clicks(created_at DESC);
+CREATE TABLE IF NOT EXISTS view_events (
+  id TEXT PRIMARY KEY,
+  title_id TEXT NOT NULL REFERENCES titles(id) ON DELETE CASCADE,
+  episode_id TEXT REFERENCES episodes(id) ON DELETE SET NULL,
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  visitor_key TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS view_events_popular_idx ON view_events(created_at,title_id);
+CREATE INDEX IF NOT EXISTS view_events_episode_idx ON view_events(episode_id,created_at);
+CREATE TABLE IF NOT EXISTS watched_episodes (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  episode_id TEXT NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,
+  watched_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(user_id,episode_id)
+);
+CREATE TABLE IF NOT EXISTS user_playback_preferences (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  volume REAL NOT NULL DEFAULT 1 CHECK (volume BETWEEN 0 AND 1),
+  quality TEXT NOT NULL DEFAULT 'auto' CHECK (quality IN ('auto','480p','720p','1080p')),
+  subtitle_language TEXT NOT NULL DEFAULT 'si',
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS title_requests (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  requested_title TEXT NOT NULL,
+  details TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','reviewing','added','declined')),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS title_requests_status_idx ON title_requests(status,created_at DESC);
+CREATE TABLE IF NOT EXISTS link_reports (
+  id TEXT PRIMARY KEY,
+  target_type TEXT NOT NULL CHECK (target_type IN ('title','episode','video_source','download')),
+  target_id TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  details TEXT NOT NULL DEFAULT '',
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','reviewing','resolved','dismissed')),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS link_reports_status_idx ON link_reports(status,created_at DESC);

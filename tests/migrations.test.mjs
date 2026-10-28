@@ -29,7 +29,7 @@ test("an existing 001 database upgrades in place and serves cast, galleries, and
     const {isBlobStorageConfigured}=await import("./lib/blob-storage.ts");
     const {persistTitleEpisodes}=await import("./lib/title-episodes.ts");
     const applied=await database.prepare("SELECT id FROM schema_migrations ORDER BY id").all();
-    assert.deepEqual(applied.map(row=>row.id),["001_initial","002_cast_gallery_media","003_media_associations","004_featured_order","005_homepage_slides","006_kverse_brand","007_deardrama_brand","008_title_catalog_metrics"]);
+    assert.deepEqual(applied.map(row=>row.id),["001_initial","002_cast_gallery_media","003_media_associations","004_featured_order","005_homepage_slides","006_kverse_brand","007_deardrama_brand","008_title_catalog_metrics","009_streaming_foundation"]);
     await database.prepare("UPDATE titles SET imdb_rating=?,imdb_rating_is_estimate=?,total_episodes=?,total_runtime_minutes=? WHERE id=?").run(8.2,0,16,1120,"migration-title");
     const titleMetrics=await database.prepare("SELECT imdb_rating,imdb_rating_is_estimate,total_episodes,total_runtime_minutes FROM titles WHERE id=?").get("migration-title");
     assert.deepEqual([titleMetrics.imdb_rating,titleMetrics.imdb_rating_is_estimate,titleMetrics.total_episodes,titleMetrics.total_runtime_minutes],[8.2,0,16,1120]);
@@ -42,8 +42,9 @@ test("an existing 001 database upgrades in place and serves cast, galleries, and
     process.env.VERCEL_OIDC_TOKEN="development-oidc-token";
     assert.equal(isBlobStorageConfigured(new Request("https://example.test")),true);
     delete process.env.BLOB_STORE_ID;delete process.env.VERCEL_OIDC_TOKEN;
-    const tables=await database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('cast_members','title_cast','title_gallery','cast_gallery','media_assets','media_asset_usages','homepage_slides') ORDER BY name").all();
-    assert.equal(tables.length,7);
+    const tables=await database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('cast_members','title_cast','title_gallery','cast_gallery','media_assets','media_asset_usages','homepage_slides','content_subtitle_tracks','video_sources','download_links','download_clicks','view_events','watched_episodes','user_playback_preferences','title_requests','link_reports') ORDER BY name").all();
+    assert.equal(tables.length,16);
+    assert.equal((await database.prepare("SELECT catalog_type FROM titles WHERE id=?").get("migration-title")).catalog_type,"series");
     assert.deepEqual((await listHomepageSlides()).map(slide=>[slide.slide_id,slide.id,slide.backdrop_url]),[["legacy-migration-title","migration-title","https://media.example.test/title-backdrop.jpg"]]);
     await database.prepare("UPDATE titles SET featured_order=? WHERE id=?").run(5,"migration-title");
     await database.prepare("INSERT INTO titles(id,type,slug,title,published,featured,featured_order) VALUES(?,?,?,?,1,1,?)").run("migration-featured-first","movie","featured-order-first","Featured Order First",1);
@@ -102,12 +103,17 @@ test("an existing 001 database upgrades in place and serves cast, galleries, and
     await persistTitleEpisodes(database,"migration-title",[
       {id:"audit-episode-3",seasonNumber:1,episodeNumber:1,title:"Second opener",videoUrl:""},
       {id:"audit-episode-1",seasonNumber:1,episodeNumber:2,title:"Unstreamed opener",videoUrl:""},
-      {id:"audit-episode-2",seasonNumber:2,episodeNumber:1,title:"First available episode",videoUrl:"https://media.example.test/episode.mp4",subtitles:[{language:"en",label:"English",fileUrl:"https://media.example.test/episode.vtt",kind:"subtitles"}]},
+      {id:"audit-episode-2",seasonNumber:2,episodeNumber:1,title:"First available episode",videoUrl:"https://media.example.test/episode.mp4",airDate:"2026-10-26",publishAt:"2026-10-27T12:30",published:true,subtitles:[{language:"si",label:"සිංහල",fileUrl:"https://media.example.test/episode.vtt",kind:"subtitles",isDefault:true,timingOffset:0.5}]},
     ]);
     assert.equal((await database.prepare("SELECT id FROM episodes WHERE season_id=? AND episode_number=2").get("audit-season-1")).id,"audit-episode-1");
     assert.equal((await database.prepare("SELECT episode_id,position_seconds FROM watch_progress WHERE user_id=? AND title_id=?").get("audit-user","migration-title")).episode_id,"audit-episode-1");
     assert.equal(Number((await database.prepare("SELECT position_seconds FROM watch_progress WHERE user_id=? AND title_id=?").get("audit-user","migration-title")).position_seconds),87);
     assert.equal((await database.prepare("SELECT episode_id FROM viewing_history WHERE user_id=? AND title_id=?").get("audit-user","migration-title")).episode_id,"audit-episode-1");
+    const scheduled=await database.prepare("SELECT air_date,published FROM episodes WHERE id=?").get("audit-episode-2");
+    assert.deepEqual([scheduled.air_date,Number(scheduled.published)],["2026-10-26",1]);
+    assert.equal((await database.prepare("SELECT language,is_default,timing_offset FROM content_subtitle_tracks WHERE episode_id=?").get("audit-episode-2")).language,"si");
+    assert.equal((await database.prepare("SELECT vtt_url FROM content_subtitle_tracks WHERE episode_id=?").get("audit-episode-2")).vtt_url,"https://media.example.test/episode.vtt");
+    assert.equal((await database.prepare("SELECT url FROM video_sources WHERE id=?").get("legacy-episode-audit-episode-2")).url,"https://media.example.test/episode.mp4");
     const listed=await listTitles({q:"Migration Compatibility Audit",genre:"Audit Genre"});
     assert.equal(listed.length,1);
     assert.equal(listed[0].has_playable_source,1);
@@ -116,7 +122,7 @@ test("an existing 001 database upgrades in place and serves cast, galleries, and
     assert.equal(title.title,"Migration Compatibility Audit");
     assert.equal(title.gallery.length,1);
     assert.equal(title.cast[0].name,"Migration Audit Person");
-    assert.equal(title.seasons[1].episodes[0].subtitles[0].language,"en");
+    assert.equal(title.seasons[1].episodes[0].subtitles[0].language,"si");
     assert.equal(Object.getPrototypeOf(title.seasons[1].episodes[0].subtitles[0]),Object.prototype);
     const person=await getCastMember("migration-audit-person");
     assert.equal(person.credits[0].title_slug,"migration-compatibility-audit");
