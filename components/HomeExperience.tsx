@@ -14,7 +14,7 @@ const artFallback="radial-gradient(ellipse at 72% 25%,rgba(232,62,104,.2),transp
 function HeroArtwork({item,className,priority=false}:{item:TitleSummary;className:string;priority?:boolean}) {
  let source="";
  try{const url=new URL(item.backdrop_url);if(url.protocol==="https:"||url.protocol==="http:")source=url.toString();}catch{}
- return <div className={className} aria-hidden="true" style={{backgroundImage:artFallback}}>{source&&<Image fill src={source} alt="" sizes="100vw" quality={75} priority={priority} loading={priority?undefined:"lazy"} placeholder="blur" blurDataURL={IMAGE_BLUR_DATA_URL} unoptimized={source.startsWith("http:")} className="hero-art-image"/>}</div>;
+ return <div className={className} aria-hidden="true" style={{backgroundImage:artFallback}}>{source&&<Image fill src={source} alt="" sizes="100vw" quality={90} priority={priority} loading={priority?undefined:"lazy"} placeholder="blur" blurDataURL={IMAGE_BLUR_DATA_URL} unoptimized={source.startsWith("http:")} className="hero-art-image"/>}</div>;
 }
 
 export function FeaturedHero({items}:{items:TitleSummary[]}) {

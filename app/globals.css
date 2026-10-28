@@ -411,7 +411,9 @@ button{color:inherit}
  .watchlist-link{display:none}.mobile-nav{top:65px;padding-left:16px;padding-right:16px}
  .header-search{top:60px;right:10px}
  .hero{height:auto;min-height:700px;max-height:none;padding:120px 22px 100px;background-position:61% center;align-items:flex-end}
- .hero-art{background-position:61% center}.hero-art-image{object-position:61% center}
+ .hero-art{top:66px;right:0;bottom:auto;left:0;height:48vw;min-height:190px;max-height:312px;background-position:center top;animation:none}
+ .hero-art-image{object-fit:contain;object-position:center top}
+ .hero-art-incoming{animation:hero-art-cinematic-reveal .95s cubic-bezier(.2,.72,.2,1) both}
  .hero:after{background:radial-gradient(ellipse at 72% 25%,rgba(232,62,104,.1),transparent 37%),linear-gradient(0deg,#08080d 0%,rgba(8,8,13,.94) 30%,rgba(8,8,13,.45) 64%,rgba(8,8,13,.18) 100%)}
  .hero-copy{width:100%;max-width:520px;margin:0;z-index:2}
  .hero h1{font-size:clamp(39px,11vw,57px);letter-spacing:-1.8px;margin-top:10px}
