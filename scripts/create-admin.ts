@@ -12,10 +12,11 @@ if(password.length<14||password.length>128) throw new Error("Set ADMIN_PASSWORD 
 console.log("Database target:",getDatabaseConfigurationSummary());
 const [{createUser,database,getUserByEmail},{hashPassword}]=await Promise.all([import("../lib/db.ts"),import("../lib/security.ts")]);
 if(await getUserByEmail(email)) throw new Error("That email already has an account. This command never promotes an existing account.");
-if(Number((await database.prepare("SELECT COUNT(*) n FROM users WHERE role='admin'").get() as {n:number}).n)>0) throw new Error("An administrator already exists. Use your existing secure account-management procedure.");
+const existingAdmin=await database.prepare("SELECT id FROM users WHERE role='admin' AND status='active' ORDER BY created_at LIMIT 1").get() as {id:string}|undefined;
 const displayName=(process.env.ADMIN_NAME||"Platform Administrator").slice(0,50);
 const user=await createUser({email,displayName,passwordHash:hashPassword(password),role:"admin"});
-await database.prepare("INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id) VALUES(?,?,?,?)").run(user.id,"admin.bootstrap","user",user.id);
-console.log(`Administrator account created for ${user.email}. Keep its password in a password manager.`);
+await database.prepare("INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)")
+  .run(existingAdmin?.id??user.id,existingAdmin?"admin.provision":"admin.bootstrap","user",user.id,JSON.stringify({email:user.email}));
+console.log(`${existingAdmin?"Additional":"First"} administrator account created for ${user.email}. Keep its password in a password manager.`);
 
 export {};

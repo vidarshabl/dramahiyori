@@ -8,6 +8,13 @@ import {MediaCard,RailControls} from "./MediaRail";
 import {useScrollReveal} from "./useScrollReveal";
 
 const heroSlideKey=(item:Title)=>(item as Title&{slide_id?:string}).slide_id||item.id;
+const artFallback="radial-gradient(ellipse at 72% 25%,rgba(232,62,104,.2),transparent 36%),linear-gradient(135deg,#211329,#11111a 70%,#08080d)";
+
+function HeroArtwork({item,className,priority=false}:{item:Title;className:string;priority?:boolean}) {
+ let source="";
+ try{const url=new URL(item.backdrop_url);if(url.protocol==="https:"||url.protocol==="http:")source=url.toString();}catch{}
+ return <div className={className} aria-hidden="true" style={{backgroundImage:artFallback}}>{source&&<Image fill src={source} alt="" sizes="100vw" quality={75} priority={priority} unoptimized={source.startsWith("http:")} className="hero-art-image"/>}</div>;
+}
 
 export function FeaturedHero({items}:{items:Title[]}) {
  const previousIndex=useRef(0);const [index,setIndex]=useState(0),[previousItem,setPreviousItem]=useState<Title|null>(null),[paused,setPaused]=useState(false),[interacting,setInteracting]=useState(false),[reducedMotion,setReducedMotion]=useState(false);const item=items[index];
@@ -19,15 +26,12 @@ export function FeaturedHero({items}:{items:Title[]}) {
  useEffect(()=>{if(!previousItem)return;const delay=window.matchMedia("(prefers-reduced-motion: reduce)").matches?0:820;const timer=window.setTimeout(()=>setPreviousItem(null),delay);return()=>window.clearTimeout(timer);},[previousItem]);
  useEffect(()=>{if(!autoRotate||paused||interacting||window.matchMedia("(prefers-reduced-motion: reduce)").matches)return;let timer:number|undefined;const schedule=()=>{if(timer)window.clearTimeout(timer);if(!document.hidden)timer=window.setTimeout(()=>setIndex(current=>(current+1)%items.length),8500);};schedule();document.addEventListener("visibilitychange",schedule);return()=>{if(timer)window.clearTimeout(timer);document.removeEventListener("visibilitychange",schedule);};},[autoRotate,items.length,index,paused,interacting]);
  if(!item)return null;
- const backdrop=(value:string)=>{try{const url=new URL(value);return url.protocol==="https:"||url.protocol==="http:"?`url(${JSON.stringify(url.toString())})`:"";}catch{return "";}};
- const artFallback="radial-gradient(ellipse at 72% 25%,rgba(232,62,104,.2),transparent 36%),linear-gradient(135deg,#211329,#11111a 70%,#08080d)";
- const artStyle=(value:string)=>({backgroundImage:[backdrop(value),artFallback].filter(Boolean).join(",")||artFallback});
  const canPlay=item.has_playable_source===undefined?Boolean(item.video_url):item.has_playable_source===1;
  const watchHref="/watch?"+new URLSearchParams({slug:item.slug,...(item.first_playable_episode_id?{episode:item.first_playable_episode_id}:{})}).toString();
  const meta=[item.alternative_title,item.release_year?String(item.release_year):"",item.type==="movie"?"Film":"Series"].filter(Boolean);
  return <section className="hero" onMouseEnter={()=>setInteracting(true)} onMouseLeave={()=>setInteracting(false)} onFocusCapture={()=>setInteracting(true)} onBlurCapture={event=>{if(!event.currentTarget.contains(event.relatedTarget as Node|null))setInteracting(false);}} onTouchStart={()=>setPaused(true)}>
-   {previousItem&&<div key={"out-"+heroSlideKey(previousItem)} className="hero-art hero-art-outgoing" aria-hidden="true" style={artStyle(previousItem.backdrop_url)}/>}
-   <div key={heroSlideKey(item)} className="hero-art hero-art-incoming" aria-hidden="true" style={artStyle(item.backdrop_url)}/>
+   {previousItem&&<HeroArtwork key={"out-"+heroSlideKey(previousItem)} item={previousItem} className="hero-art hero-art-outgoing"/>}
+   <HeroArtwork key={heroSlideKey(item)} item={item} className="hero-art hero-art-incoming" priority={index===0}/>
    <div className="hero-grain"/><div className="hero-copy" key={heroSlideKey(item)}><div className="hero-overline"><span className="featured-mark"><Icon name="spark"/></span> {item.featured===1?"FEATURED STORY":"A STORY TO STAY"} <span className="overline-line"/></div><span className="hero-demo">{item.demo===1?"SAMPLE STORY":item.featured===1?"FEATURED TITLE":"FROM THE COLLECTION"}</span><h1>{item.title}</h1>{meta.length>0&&<p className="hero-alt">{meta.map((value,metaIndex)=><span key={value}>{metaIndex>0&&<i aria-hidden="true"> · </i>}{value}</span>)}</p>}<div className="hero-genres">{item.genres?.slice(0,3).map(g=><span key={g}>{g}</span>)}</div>{item.synopsis&&<p className="hero-synopsis">{item.synopsis}</p>}<div className="hero-actions">{canPlay?<><Link href={watchHref} className="button button-primary"><Icon name="play"/> Watch now</Link><Link href={"/title/"+item.slug} className="button button-glass">More details <span>↗</span></Link></>:<Link href={"/title/"+item.slug} className="button button-primary">Explore story <span>↗</span></Link>}</div>{(item.demo===1||item.country)&&<div className="hero-note"><span>✧</span> {item.demo===1?"An original sample story for demonstration":item.country}</div>}</div>
    {items.length>1&&<div className="hero-controls"><span className="hero-counter">{String(index+1).padStart(2,"0")} <i>/</i> {String(items.length).padStart(2,"0")}</span><div className="hero-progress" role="group" aria-label="Choose a featured story">{items.map((slide,slideIndex)=><button type="button" key={heroSlideKey(slide)} className={slideIndex===index?"is-active":""} aria-label={`Show featured story ${slideIndex+1}`} aria-pressed={slideIndex===index} onClick={()=>changeSlide(slideIndex)}/>)}</div>{autoRotate&&<button type="button" className="hero-control" aria-label={paused?"Resume featured story rotation":"Pause featured story rotation"} aria-pressed={paused} onClick={()=>{setPaused(value=>!value);setInteracting(false);}}>{paused?"▶":"Ⅱ"}</button>}<button type="button" className="hero-control" aria-label="Previous featured story" onClick={()=>changeSlide((index+items.length-1)%items.length)}>←</button><button type="button" className="hero-control" aria-label="Next featured story" onClick={()=>changeSlide((index+1)%items.length)}>→</button></div>}
    <div className="hero-side-label">A NEW CHAPTER BEGINS <span>✦</span></div>

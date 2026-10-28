@@ -47,6 +47,7 @@ button{color:inherit}
 
 .hero{position:relative;isolation:isolate;min-height:695px;height:min(790px,86vh);max-height:890px;background-color:var(--night);display:flex;align-items:center;overflow:hidden;padding:106px max(8vw,48px) 65px}
 .hero-art{position:absolute;inset:-2%;z-index:0;background-size:cover;background-position:center 42%;animation:hero-art-drift 30s ease-in-out infinite alternate}
+.hero-art-image{object-fit:cover;object-position:center 42%}
 .hero-art-incoming{animation:hero-art-drift 30s ease-in-out infinite alternate,hero-art-cinematic-reveal .95s cubic-bezier(.2,.72,.2,1) both}
 .hero-art-outgoing{animation:hero-art-crossfade-out .82s ease both}
 .hero:after{content:"";position:absolute;z-index:1;inset:0;background:radial-gradient(ellipse at 74% 28%,rgba(232,62,104,.13),transparent 30%),radial-gradient(ellipse at 55% 80%,rgba(167,139,250,.08),transparent 38%),linear-gradient(180deg,rgba(8,8,13,.28),transparent 18%,rgba(8,8,13,.08) 58%,#08080d 100%),linear-gradient(90deg,rgba(8,8,13,.76) 0%,rgba(8,8,13,.62) 35%,rgba(8,8,13,.2) 68%,transparent 88%);pointer-events:none}
@@ -390,7 +391,7 @@ button{color:inherit}
  .mobile-nav>a:hover,.mobile-nav>button:hover{color:var(--rose-light);padding-left:13px}
  .mobile-nav>a.is-active{color:var(--rose-light);border-radius:7px;background:rgba(232,62,104,.11);border-bottom-color:transparent}
  .hero{min-height:620px;height:78vh;padding-left:7vw;padding-right:7vw;background-position:62% center}
- .hero-art{background-position:62% center}
+ .hero-art{background-position:62% center}.hero-art-image{object-position:62% center}
  .hero-copy{width:min(590px,75%);margin-top:52px}
  .home-content{padding:24px}
  .page-shell{padding:126px 27px 60px}
@@ -409,7 +410,7 @@ button{color:inherit}
  .watchlist-link{display:none}.mobile-nav{top:65px;padding-left:16px;padding-right:16px}
  .header-search{top:60px;right:10px}
  .hero{height:auto;min-height:700px;max-height:none;padding:120px 22px 100px;background-position:61% center;align-items:flex-end}
- .hero-art{background-position:61% center}
+ .hero-art{background-position:61% center}.hero-art-image{object-position:61% center}
  .hero:after{background:radial-gradient(ellipse at 72% 25%,rgba(232,62,104,.1),transparent 37%),linear-gradient(0deg,#08080d 0%,rgba(8,8,13,.94) 30%,rgba(8,8,13,.45) 64%,rgba(8,8,13,.18) 100%)}
  .hero-copy{width:100%;max-width:520px;margin:0;z-index:2}
  .hero h1{font-size:clamp(39px,11vw,57px);letter-spacing:-1.8px;margin-top:10px}
