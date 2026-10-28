@@ -26,8 +26,9 @@ function validTitle(body:Record<string,unknown>) {
   const country=typeof body.country==="string"?body.country.trim().slice(0,100):"";
   const alternative=typeof body.alternativeTitle==="string"?body.alternativeTitle.trim().slice(0,160):"";
   const rating=typeof body.contentRating==="string"?body.contentRating.trim().slice(0,30):"";
-  const runtime=body.runtimeMinutes===""||body.runtimeMinutes==null?null:Number(body.runtimeMinutes);
-  if(runtime!==null&&(!Number.isInteger(runtime)||runtime<1||runtime>600))return {error:"Enter a valid runtime in minutes."};
+  const runtimeInput=body.runtimeMinutes;
+  const runtime=runtimeInput===""||runtimeInput==null?null:typeof runtimeInput==="number"||typeof runtimeInput==="string"?Number(runtimeInput):Number.NaN;
+  if(runtime!==null&&(!Number.isSafeInteger(runtime)||runtime<1))return {error:"Runtime must be a positive whole number of minutes."};
   const languages=Array.isArray(body.subtitleLanguages)?body.subtitleLanguages.filter((x):x is string=>typeof x==="string").map(x=>x.trim().slice(0,50)).filter(Boolean).slice(0,20):[];
   const published=body.published===true;
   const featured=body.featured===true;
@@ -86,9 +87,13 @@ async function syncHomepageSlide(db:DatabaseAdapter,titleId:string,featured:bool
   if(existing)await db.prepare("UPDATE homepage_slides SET sort_order=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(sortOrder,existing.id);
   else await db.prepare("INSERT INTO homepage_slides(id,title_id,backdrop_url,sort_order) VALUES(?,?,?,?)").run(`legacy-${titleId}`,titleId,backdropUrl,sortOrder);
 }
-export async function GET() {
+export async function GET(request:Request) {
   const admin=await currentAdmin(); if(!admin)return badRequest("Administrator access is required.",403);
-  const items=await database.prepare("SELECT * FROM titles ORDER BY updated_at DESC LIMIT 200").all() as {id:string;[key:string]:any}[];
+  const requestedId=new URL(request.url).searchParams.get("id");
+  const items=requestedId
+    ? await database.prepare("SELECT * FROM titles WHERE id=?").all(requestedId) as {id:string;[key:string]:any}[]
+    : await database.prepare("SELECT * FROM titles ORDER BY updated_at DESC LIMIT 200").all() as {id:string;[key:string]:any}[];
+  if(requestedId&&!items.length)return badRequest("That title could not be found.",404);
   const expanded=await Promise.all(items.map(async t=>{
     const [genres,episodes,gallery]=await Promise.all([
       database.prepare("SELECT g.name FROM genres g JOIN title_genres tg ON tg.genre_id=g.id WHERE tg.title_id=?").all(t.id) as Promise<{name:string}[]>,

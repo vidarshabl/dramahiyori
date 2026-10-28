@@ -14,6 +14,11 @@ type EpisodeInput={id?:string;editorId:string;title:string;seasonNumber:number;e
 const blank={title:"",type:"series",slug:"",alternativeTitle:"",synopsis:"",releaseYear:"",country:"South Korea",status:"completed",runtimeMinutes:"",posterUrl:"",backdropUrl:"",videoUrl:"",contentRating:"",genres:"",subtitleLanguages:"",published:false,featured:false,featuredOrder:0};
 const tabs:[Tab,string][]=[["overview","Overview"],["homeEditor","Home editor"],["titles","Content"],["cast","Cast & crew"],["media","Media library"],["users","Users"],["settings","Site settings"]];
 const nextEditorId=()=>crypto.randomUUID();
+function subtitleLanguagesText(value:unknown):string {
+  if(Array.isArray(value))return value.filter((item):item is string=>typeof item==="string").join(", ");
+  if(typeof value!=="string"||!value.trim())return "";
+  try{const parsed=JSON.parse(value);return Array.isArray(parsed)?parsed.filter((item):item is string=>typeof item==="string").join(", "):value;}catch{return value;}
+}
 function previewImageUrl(value:string):string|null {
   try { const url=new URL(value.trim()); return url.protocol==="https:"&&url.hostname?url.toString():null; }
   catch { return null; }
@@ -22,7 +27,7 @@ function previewImageUrl(value:string):string|null {
 export function AdminDashboard({name}:{name:string}) {
   const [tab,setTab]=useState<Tab>("overview");
   const [overview,setOverview]=useState<any>(null),[titles,setTitles]=useState<any[]>([]),[users,setUsers]=useState<any[]>([]),[settings,setSettings]=useState<any>({}),[mediaAssets,setMediaAssets]=useState<any[]>([]),[storageConfigured,setStorageConfigured]=useState<boolean|null>(null);
-  const [form,setForm]=useState<any>(blank),[gallery,setGallery]=useState<{url:string;caption:string;attribution:string}[]>([]),[episodes,setEpisodes]=useState<EpisodeInput[]>([]),[editing,setEditing]=useState(false),[query,setQuery]=useState(""),[message,setMessage]=useState(""),[error,setError]=useState(""),[busy,setBusy]=useState(false);
+  const [form,setForm]=useState<any>(blank),[gallery,setGallery]=useState<{url:string;caption:string;attribution:string}[]>([]),[episodes,setEpisodes]=useState<EpisodeInput[]>([]),[editing,setEditing]=useState(false),[loadingTitleId,setLoadingTitleId]=useState(""),[query,setQuery]=useState(""),[message,setMessage]=useState(""),[error,setError]=useState(""),[busy,setBusy]=useState(false);
   const router=useRouter();
 
   const loadOverview=useCallback(async()=>{const response=await fetch("/api/admin/overview");if(response.status===403){router.replace("/admin/login");return;}const data=await response.json();if(!response.ok)throw new Error(data.error||"Dashboard overview could not be loaded.");setOverview(data);},[router]);
@@ -34,11 +39,19 @@ export function AdminDashboard({name}:{name:string}) {
   useEffect(()=>{if(tab==="titles"||tab==="cast"||tab==="homeEditor")void loadMedia().catch(reason=>setError(reason instanceof Error?reason.message:"Media library could not be loaded."));},[tab,loadMedia]);
   useEffect(()=>{if(tab!=="users")return;const timer=setTimeout(()=>void loadUsers().catch(reason=>setError(reason instanceof Error?reason.message:"User accounts could not be loaded.")),220);return()=>clearTimeout(timer);},[tab,loadUsers]);
 
-  function edit(item:any) {
-    setForm({title:item.title,type:item.type,slug:item.slug,alternativeTitle:item.alternative_title||"",synopsis:item.synopsis||"",releaseYear:item.release_year||"",country:item.country||"",status:item.status||"completed",runtimeMinutes:item.runtime_minutes||"",posterUrl:item.poster_url||"",backdropUrl:item.backdrop_url||"",videoUrl:item.video_url||"",contentRating:item.content_rating||"",genres:(item.genres||[]).join(", "),subtitleLanguages:Array.isArray(JSON.parse(item.subtitle_languages||"[]"))?JSON.parse(item.subtitle_languages||"[]").join(", "):"",published:item.published===1,featured:item.featured===1,featuredOrder:Number(item.featured_order)||0,id:item.id});
-    setEpisodes((item.episodes||[]).map((episode:any)=>({id:episode.id,editorId:nextEditorId(),title:episode.title,seasonNumber:Number(episode.season_number)||1,episodeNumber:Number(episode.episode_number)||1,synopsis:episode.synopsis||"",thumbnailUrl:episode.thumbnail_url||"",durationMinutes:episode.duration_minutes==null?"":String(episode.duration_minutes),videoUrl:episode.video_url||"",subtitles:(episode.subtitles||[]).map((track:any)=>({language:track.language||"",label:track.label||"",fileUrl:track.fileUrl||"",kind:track.kind==="captions"?"captions":"subtitles"}))})));
-    setGallery((item.gallery||[]).map((image:any)=>({url:image.image_url,caption:image.caption||"",attribution:image.attribution||""})));
-    setEditing(true);setTab("titles");setMessage("");setError("");window.scrollTo({top:0,behavior:"smooth"});
+  async function edit(item:any) {
+    setLoadingTitleId(item.id);setError("");setMessage("");
+    try{
+      const response=await fetch("/api/admin/titles?id="+encodeURIComponent(item.id),{cache:"no-store"});
+      if(response.status===403){router.replace("/admin/login");return;}
+      const data=await response.json();if(!response.ok)throw new Error(data.error||"The title could not be loaded for editing.");
+      const saved=data.items?.[0];if(!saved)throw new Error("That title could not be found. Refresh the catalog and try again.");
+      setForm({title:saved.title,type:saved.type,slug:saved.slug,alternativeTitle:saved.alternative_title||"",synopsis:saved.synopsis||"",releaseYear:saved.release_year==null?"":String(saved.release_year),country:saved.country||"",status:saved.status||"completed",runtimeMinutes:saved.runtime_minutes==null?"":String(saved.runtime_minutes),posterUrl:saved.poster_url||"",backdropUrl:saved.backdrop_url||"",videoUrl:saved.video_url||"",contentRating:saved.content_rating||"",genres:Array.isArray(saved.genres)?saved.genres.join(", "):"",subtitleLanguages:subtitleLanguagesText(saved.subtitle_languages),published:Number(saved.published)===1,featured:Number(saved.featured)===1,featuredOrder:Number(saved.featured_order)||0,id:saved.id});
+      setEpisodes((saved.episodes||[]).map((episode:any)=>({id:episode.id,editorId:nextEditorId(),title:episode.title,seasonNumber:Number(episode.season_number)||1,episodeNumber:Number(episode.episode_number)||1,synopsis:episode.synopsis||"",thumbnailUrl:episode.thumbnail_url||"",durationMinutes:episode.duration_minutes==null?"":String(episode.duration_minutes),videoUrl:episode.video_url||"",subtitles:(episode.subtitles||[]).map((track:any)=>({language:track.language||"",label:track.label||"",fileUrl:track.fileUrl||"",kind:track.kind==="captions"?"captions":"subtitles"}))})));
+      setGallery((saved.gallery||[]).map((image:any)=>({url:image.image_url,caption:image.caption||"",attribution:image.attribution||""})));
+      setEditing(true);setTab("titles");window.scrollTo({top:0,behavior:"smooth"});
+    }catch(reason){setError(reason instanceof Error?reason.message:"The title could not be loaded for editing.");}
+    finally{setLoadingTitleId("");}
   }
   function newTitle(type:"series"|"movie"="series"){setForm({...blank,type});setGallery([]);setEpisodes([]);setEditing(true);setTab("titles");setMessage("");setError("");}
   async function saveTitle(event:FormEvent) {
@@ -84,7 +97,7 @@ export function AdminDashboard({name}:{name:string}) {
         <div className="admin-page-intro"><h2>Good to see you, {name.split(" ")[0]}.</h2><p>Here is what’s in your DearDrama database right now.</p></div>
         <div className="admin-quick-actions"><button className="button button-primary" onClick={()=>newTitle("series")}>＋ Add drama</button><button className="button button-glass" onClick={()=>newTitle("movie")}>＋ Add movie</button><button className="button button-glass" onClick={()=>{setTab("cast");setMessage("");setError("");}}>＋ Add cast member</button><button className="button button-glass" onClick={()=>setTab("media")}>＋ Upload photos</button></div>
         <div className="admin-stats">{[["Registered users",overview?.stats?.users],["Movies",overview?.stats?.movies],["Series",overview?.stats?.series],["Episodes",overview?.stats?.episodes],["Published",overview?.stats?.published],["Drafts",overview?.stats?.drafts],["Cast profiles",overview?.stats?.cast],["Uploaded images",overview?.stats?.media]].map(([label,value])=><div className="admin-stat" key={label as string}><span>{label}</span><strong>{value??"—"}</strong></div>)}</div>
-        <section className="admin-section"><div className="admin-section-title"><h3>Recent content updates</h3><button onClick={()=>setTab("titles")}>Manage content →</button></div><AdminTitleTable items={overview?.titles||[]} onEdit={edit} onDelete={deleteTitle}/></section>
+        <section className="admin-section"><div className="admin-section-title"><h3>Recent content updates</h3><button onClick={()=>setTab("titles")}>Manage content →</button></div><AdminTitleTable items={overview?.titles||[]} onEdit={edit} onDelete={deleteTitle} loadingId={loadingTitleId}/></section>
         <section className="admin-section"><div className="admin-section-title"><h3>Recent administrator activity</h3></div>{overview?.audit?.length?<div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Action</th><th>Record</th><th>Admin</th><th>When</th></tr></thead><tbody>{overview.audit.map((entry:any,index:number)=><tr key={index}><td>{entry.action}</td><td>{entry.entity_type} · {entry.entity_id.slice(0,8)}</td><td>{entry.email||"Account removed"}</td><td>{entry.created_at}</td></tr>)}</tbody></table></div>:<p className="admin-notice">No sensitive actions have been recorded yet.</p>}</section>
       </>}
 
@@ -98,7 +111,7 @@ export function AdminDashboard({name}:{name:string}) {
             <label>Title<input required maxLength={160} value={form.title} onChange={event=>setForm({...form,title:event.target.value})}/></label><label>Type<select value={form.type} onChange={event=>setForm({...form,type:event.target.value})}><option value="series">Series</option><option value="movie">Movie</option></select></label>
             <label>URL slug<input value={form.slug} onChange={event=>setForm({...form,slug:event.target.value})} placeholder="generated-from-title"/></label><label>Alternative title<input value={form.alternativeTitle} maxLength={160} onChange={event=>setForm({...form,alternativeTitle:event.target.value})}/></label>
             <label>Release year<input type="number" min="1900" max="2100" value={form.releaseYear} onChange={event=>setForm({...form,releaseYear:event.target.value})}/></label><label>Country<input value={form.country} maxLength={100} onChange={event=>setForm({...form,country:event.target.value})}/></label>
-            <label>Completion status<select value={form.status} onChange={event=>setForm({...form,status:event.target.value})}><option value="ongoing">Ongoing</option><option value="completed">Completed</option><option value="upcoming">Upcoming</option></select></label><label>Runtime in minutes (films)<input type="number" min="1" max="600" value={form.runtimeMinutes} onChange={event=>setForm({...form,runtimeMinutes:event.target.value})}/></label>
+            <label>Completion status<select value={form.status} onChange={event=>setForm({...form,status:event.target.value})}><option value="ongoing">Ongoing</option><option value="completed">Completed</option><option value="upcoming">Upcoming</option></select></label><label>Runtime in minutes<input type="number" step="1" inputMode="numeric" value={form.runtimeMinutes} onChange={event=>setForm({...form,runtimeMinutes:event.target.value})}/></label>
             <label className="wide">Synopsis<textarea maxLength={5000} value={form.synopsis} onChange={event=>setForm({...form,synopsis:event.target.value})}/></label>
             <label>Genre names<input value={form.genres} onChange={event=>setForm({...form,genres:event.target.value})} placeholder="Romance, Healing Romance"/></label><label>Subtitle languages<input value={form.subtitleLanguages} onChange={event=>setForm({...form,subtitleLanguages:event.target.value})} placeholder="English, Korean"/></label>
             <label>Poster URL<input list="admin-media-urls" type="url" value={form.posterUrl} onChange={event=>setForm({...form,posterUrl:event.target.value})} placeholder="https://…"/>{!!mediaAssets.length&&<select aria-label="Choose an uploaded poster" value={mediaAssets.some(asset=>asset.url===form.posterUrl)?form.posterUrl:""} onChange={event=>setForm({...form,posterUrl:event.target.value})}><option value="">Choose from media library…</option>{mediaAssets.map(asset=><option key={asset.id} value={asset.url}>{asset.filename} · {asset.role}</option>)}</select>}{posterPreview?<div className="admin-image-url-preview admin-image-url-preview-poster" role="img" aria-label="Poster preview"><RemoteImage src={posterPreview} alt="Poster preview" sizes="110px" fallbackLabel="Poster preview"/></div>:<small className="admin-image-preview-hint">Enter a complete HTTPS image URL to preview the poster. Save the title to apply it.</small>}</label>
@@ -112,7 +125,7 @@ export function AdminDashboard({name}:{name:string}) {
             <div className="admin-actions wide"><button disabled={busy} className="button button-primary">{busy?"Saving…":"Save title"}</button><button type="button" className="button button-glass" onClick={()=>setEditing(false)}>Cancel</button></div>
           </form>}
         </div>
-        <section className="admin-section"><div className="admin-section-title"><h3>Catalog</h3></div><AdminTitleTable items={titles} onEdit={edit} onDelete={deleteTitle}/></section>
+        <section className="admin-section"><div className="admin-section-title"><h3>Catalog</h3></div><AdminTitleTable items={titles} onEdit={edit} onDelete={deleteTitle} loadingId={loadingTitleId}/></section>
         <p className="admin-notice">Poster and backdrop fields accept HTTPS image URLs or uploaded library images. Video URLs must be yours to distribute or otherwise licensed.</p>
       </>}
 
@@ -160,6 +173,6 @@ function EpisodeEditor({episodes,setEpisodes,assets}:{episodes:EpisodeInput[];se
   </section>;
 }
 
-function AdminTitleTable({items,onEdit,onDelete}:{items:any[];onEdit:(item:any)=>void;onDelete:(item:any)=>void}) {
-  return <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Title</th><th>Type</th><th>Updated</th><th>Visibility</th><th>Actions</th></tr></thead><tbody>{items.map(item=><tr key={item.id}><td>{item.title}<div className="admin-mobile-title">{item.slug}</div></td><td>{item.type}</td><td>{item.updated_at}</td><td><span className={"status-pill "+(item.published?"live":"draft")}>{item.published?"Published":"Draft"}</span></td><td><div className="admin-user-actions"><button type="button" onClick={()=>onEdit(item)}>Edit</button><button type="button" onClick={()=>onDelete(item)}>Delete</button></div></td></tr>)}{!items.length&&<tr><td colSpan={5}>No titles yet.</td></tr>}</tbody></table></div>;
+function AdminTitleTable({items,onEdit,onDelete,loadingId=""}:{items:any[];onEdit:(item:any)=>void;onDelete:(item:any)=>void;loadingId?:string}) {
+  return <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Title</th><th>Type</th><th>Updated</th><th>Visibility</th><th>Actions</th></tr></thead><tbody>{items.map(item=><tr key={item.id}><td>{item.title}<div className="admin-mobile-title">{item.slug}</div></td><td>{item.type}</td><td>{item.updated_at}</td><td><span className={"status-pill "+(item.published?"live":"draft")}>{item.published?"Published":"Draft"}</span></td><td><div className="admin-user-actions"><button type="button" disabled={loadingId===item.id} onClick={()=>onEdit(item)}>{loadingId===item.id?"Loading…":"Edit"}</button><button type="button" onClick={()=>onDelete(item)}>Delete</button></div></td></tr>)}{!items.length&&<tr><td colSpan={5}>No titles yet.</td></tr>}</tbody></table></div>;
 }
