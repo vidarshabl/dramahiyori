@@ -41,7 +41,7 @@ export default function RootLayout({
         <Script
           src="https://nap5k.com/tag.min.js"
           data-zone="12139234"
-          strategy="afterInteractive"
+          strategy="lazyOnload"
         />
       </body>
     </html>

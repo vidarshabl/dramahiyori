@@ -1,12 +1,12 @@
 import {FeaturedHero,ContinueWatching,MoodGrid} from "@/components/HomeExperience";
 import {MediaRail} from "@/components/MediaRail";
-import {listHomepageSlides,listTitles} from "@/lib/db";
+import {listHomepageSlides,listTitles} from "@/lib/catalog";
 import {moods} from "@/lib/demo-data";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export default async function HomePage(){
- const [all,heroSlides]=await Promise.all([listTitles({limit:"48"}),listHomepageSlides()]);
+ const [all,heroSlides]=await Promise.all([listTitles({limit:"6"}),listHomepageSlides()]);
  const heroItems=heroSlides.length?heroSlides:all.slice(0,1);
  const [popular,romance,comedy,newest,ongoing,completed,movies]=await Promise.all([listTitles({sort:"popular"}),listTitles({genre:"Romance"}),listTitles({genre:"Comedy"}),listTitles({sort:"newest"}),listTitles({type:"series",status:"ongoing"}),listTitles({type:"series",status:"completed"}),listTitles({type:"movie"})]);
  return <main>

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import {notFound} from "next/navigation";
-import {getTitle,listTitles} from "@/lib/db";
+import {getTitle,listTitles} from "@/lib/catalog";
 import type {CastCredit,GalleryImage} from "@/lib/db";
 import {isValidMediaUrl} from "@/lib/security";
 import {DetailActions} from "@/components/DetailActions";

@@ -1,12 +1,12 @@
 "use client";
 import {useEffect,useState} from "react";
 import {usePathname,useRouter} from "next/navigation";
-import type {Title} from "@/lib/db";
+import type {TitleSummary} from "@/lib/db";
 import {ResultsGrid} from "./HomeExperience";
 
 type Filters={q?:string;genre?:string;country?:string;year?:string;type?:string;status?:string;sort?:string};
 export function SearchExperience({initialFilters={},genres=[],countries=[],years=[]}:{initialFilters?:Filters;genres?:string[];countries?:string[];years?:number[]}) {
- const [filters,setFilters]=useState<Filters>({...initialFilters}),[items,setItems]=useState<Title[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(""),[page,setPage]=useState(1),[hasMore,setHasMore]=useState(false);
+ const [filters,setFilters]=useState<Filters>({...initialFilters}),[items,setItems]=useState<TitleSummary[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(""),[page,setPage]=useState(1),[hasMore,setHasMore]=useState(false);
  const router=useRouter(),pathname=usePathname();
  useEffect(()=>{const timer=setTimeout(async()=>{setLoading(true);setError("");const params=new URLSearchParams();Object.entries(filters).forEach(([k,v])=>{if(v)params.set(k,v);});if(page>1)params.set("page",String(page));router.replace(pathname+(params.toString()?"?"+params.toString():""),{scroll:false});try{const res=await fetch("/api/titles?"+params.toString(),{cache:"no-store"});if(!res.ok)throw new Error("Titles could not be loaded.");const data=await res.json();setItems(old=>page===1?data.items||[]:[...old,...(data.items||[])]);setHasMore((data.items||[]).length===24);}catch(err){setError(err instanceof Error?err.message:"Please check your connection.");}finally{setLoading(false);}},250);return()=>clearTimeout(timer);},[filters,page,pathname,router]);
  function change(key:keyof Filters,value:string){setPage(1);setFilters(f=>({...f,[key]:value||undefined}));}

@@ -1,5 +1,5 @@
 import { json } from "@/lib/api";
-import { listTitles } from "@/lib/db";
+import { listTitles } from "@/lib/catalog";
 export const runtime="nodejs";
 export async function GET(request:Request) {
   const url=new URL(request.url); const filters:Record<string,string|undefined>={};

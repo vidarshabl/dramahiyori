@@ -1,6 +1,7 @@
 import { currentUser } from "@/lib/auth";
 import { badRequest, json, readJson, sameOriginOrReject } from "@/lib/api";
-import { database, listTitles } from "@/lib/db";
+import { database } from "@/lib/db";
+import { listTitles } from "@/lib/catalog";
 export const runtime="nodejs";
 export async function GET() {
   const user=await currentUser(); if(!user)return badRequest("Sign in to open your watchlist.",401);

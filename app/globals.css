@@ -122,6 +122,7 @@ button{color:inherit}
 .media-card{position:relative;min-width:0;scroll-snap-align:start;transition:transform .3s var(--ease);transform-style:preserve-3d}
 .poster-link{display:block}
 .poster-wrap{position:relative;overflow:hidden;aspect-ratio:2/3;border-radius:12px;background:linear-gradient(145deg,#211329,#34223d 55%,#11111a);box-shadow:0 7px 25px #0003;transition:box-shadow .32s var(--ease);isolation:isolate}
+.poster-wrap.poster-loading::before,.remote-image-frame.is-loading::before{content:"";position:absolute;z-index:1;inset:0;pointer-events:none;background-image:linear-gradient(100deg,transparent 35%,rgba(255,255,255,.11) 50%,transparent 65%),linear-gradient(145deg,#211329,#34223d 55%,#11111a);background-size:220% 100%,100% 100%;animation:image-skeleton 1.35s ease-in-out infinite}
 .poster-wrap img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .6s var(--ease),filter .4s ease}
 .poster-wrap::after{content:"";position:absolute;z-index:1;inset:0;pointer-events:none;opacity:0;background:radial-gradient(circle at var(--spot-x,50%) var(--spot-y,45%),rgba(255,213,224,.22),transparent 38%),linear-gradient(180deg,transparent 52%,rgba(8,8,13,.62));transition:opacity .25s ease}
 .poster-fallback{position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;align-items:center;gap:15px;text-align:center;padding:20px;color:#f8f5f7;background:radial-gradient(circle at 70% 30%,rgba(232,62,104,.2),transparent 38%),linear-gradient(150deg,#211329,#4a263f 65%,#11111a);font:500 21px var(--serif)}
@@ -548,6 +549,7 @@ button{color:inherit}
 @keyframes hero-art-drift{from{transform:scale(1.025) translate3d(0,0,0)}to{transform:scale(1.1) translate3d(-.7%,-.5%,0)}}
 @keyframes hero-art-cinematic-reveal{from{opacity:0;clip-path:inset(0 100% 0 0)}to{opacity:1;clip-path:inset(0)}}
 @keyframes hero-art-crossfade-out{from{opacity:1}to{opacity:0}}
+@keyframes image-skeleton{from{background-position:180% 0,0 0}to{background-position:-80% 0,0 0}}
 @keyframes brand-glint{0%,84%,100%{transform:translateY(-5px) rotate(0);opacity:.88}89%{transform:translateY(-6px) rotate(18deg);opacity:1}94%{transform:translateY(-5px) rotate(-8deg);opacity:.94}}
 @keyframes search-panel-in{from{opacity:0;transform:translateY(-6px) scale(.99)}to{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes mobile-menu-enter{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}

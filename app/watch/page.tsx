@@ -1,6 +1,6 @@
 import Link from "next/link";
 import {notFound} from "next/navigation";
-import {getTitle} from "@/lib/db";
+import {getTitle} from "@/lib/catalog";
 import {isValidMediaUrl} from "@/lib/security";
 import {VideoPlayer} from "@/components/VideoPlayer";
 export const runtime="nodejs";export const dynamic="force-dynamic";export const metadata={title:"Watch",robots:{index:false,follow:false}};

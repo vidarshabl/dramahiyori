@@ -3,6 +3,7 @@ import { badRequest, json, readJson, sameOriginOrReject } from "@/lib/api";
 import { database, type DatabaseAdapter } from "@/lib/db";
 import { isAllowedMediaUrl, isValidMediaUrl } from "@/lib/security";
 import { recordTitleImageUsages } from "@/lib/media-usage";
+import { invalidatePublicCatalogCache } from "@/lib/catalog";
 import { persistTitleEpisodes } from "@/lib/title-episodes";
 import { randomUUID } from "node:crypto";
 
@@ -115,6 +116,7 @@ export async function POST(request:Request) {
       await recordTitleImageUsages(tx,id,{poster:data.poster,backdrop:data.backdrop,gallery:data.gallery});
       await audit(tx,admin.id,"content.create",id,{title:data.title});
     });
+    invalidatePublicCatalogCache();
     return json({id,slug},201);
   } catch(error) { return badRequest(error instanceof Error&&error.message==="INVALID_EPISODE_ID"?"One of the selected episodes no longer belongs to this title.":"That slug may already be in use, or the record could not be saved.",409); }
 }
@@ -134,7 +136,9 @@ export async function PUT(request:Request) {
        await recordTitleImageUsages(tx,titleId,{poster:data.poster,backdrop:data.backdrop,gallery:data.gallery});
       await audit(tx,admin.id,"content.update",titleId,{title:data.title}); return true;
     });
-    return saved?json({saved:true}):badRequest("That title could not be found.",404);
+    if(!saved)return badRequest("That title could not be found.",404);
+    invalidatePublicCatalogCache();
+    return json({saved:true});
   } catch(error) { return badRequest(error instanceof Error&&error.message==="INVALID_EPISODE_ID"?"One of the selected episodes no longer belongs to this title.":"The title could not be saved. Check that its slug is unique.",409); }
 }
 export async function DELETE(request:Request) {
@@ -144,5 +148,6 @@ export async function DELETE(request:Request) {
   const title=await database.prepare("SELECT title FROM titles WHERE id=?").get(id) as {title:string}|undefined;
   if(!title)return badRequest("That title could not be found.",404);
   await database.transaction(async tx=>{await tx.prepare("DELETE FROM title_cast WHERE title_id=?").run(id);await tx.prepare("DELETE FROM title_gallery WHERE title_id=?").run(id);await tx.prepare("DELETE FROM titles WHERE id=?").run(id);await audit(tx,admin.id,"content.delete",id,{title:title.title});});
+  invalidatePublicCatalogCache();
   return json({deleted:true});
 }

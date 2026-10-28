@@ -4,6 +4,7 @@ import { badRequest, json, readJson, sameOriginOrReject } from "@/lib/api";
 import { database, type DatabaseAdapter } from "@/lib/db";
 import { isAllowedMediaUrl } from "@/lib/security";
 import { recordCastImageUsages } from "@/lib/media-usage";
+import { invalidatePublicCatalogCache } from "@/lib/catalog";
 
 export const runtime="nodejs";
 
@@ -87,6 +88,7 @@ export async function POST(request:Request) {
       await recordCastImageUsages(tx,id,{portraitUrl:data.portraitUrl,gallery:data.gallery});
       await tx.prepare("INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)").run(admin.id,"cast.create","cast_member",id,JSON.stringify({name:data.name}));
     });
+    invalidatePublicCatalogCache();
     return json({id,slug:data.slug},201);
   } catch(error) {
     return badRequest(error instanceof Error&&error.message==="INVALID_TITLE_CREDIT"?"Choose a title that still exists.":"That profile slug may already be in use, or the profile could not be saved.",409);
@@ -107,7 +109,9 @@ export async function PUT(request:Request) {
       await tx.prepare("INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)").run(admin.id,"cast.update","cast_member",body.id,JSON.stringify({name:data.name}));
       return true;
     });
-    return saved?json({saved:true,slug:data.slug}):badRequest("That cast profile could not be found.",404);
+    if(!saved)return badRequest("That cast profile could not be found.",404);
+    invalidatePublicCatalogCache();
+    return json({saved:true,slug:data.slug});
   } catch(error) {
     return badRequest(error instanceof Error&&error.message==="INVALID_TITLE_CREDIT"?"Choose a title that still exists.":"That profile could not be saved. Check that its slug is unique.",409);
   }
@@ -125,5 +129,6 @@ export async function DELETE(request:Request) {
     await tx.prepare("DELETE FROM cast_members WHERE id=?").run(id);
     await tx.prepare("INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)").run(admin.id,"cast.delete","cast_member",id,JSON.stringify({name:member.name}));
   });
+  invalidatePublicCatalogCache();
   return json({deleted:true});
 }

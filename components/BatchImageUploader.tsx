@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, DragEvent, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { RemoteImage } from "./RemoteImage";
 
 export type UploadedMedia = { id:string;url:string;pathname:string;filename:string;content_type:string;size_bytes:number;role:string;created_at:string;usages?:Array<{role:string;title_name?:string;cast_name?:string;episode_name?:string}> };
@@ -89,7 +90,7 @@ export function BatchImageUploader({onUploaded,maxBytes=4*1024*1024,roles=DEFAUL
     {!!queue.length&&<>
       <div className="batch-queue-heading"><span>{queue.length} selected · {queue.filter(item=>item.status==="uploaded").length} uploaded</span><div><button type="button" className="button button-small" disabled={active||!pendingCount} onClick={()=>void uploadPending()}>{active?"Uploading…":queue.some(item=>item.status==="failed"||item.status==="cancelled")?`Upload or retry ${pendingCount}`:`Upload ${pendingCount}`}</button><button type="button" className="batch-clear" disabled={active} onClick={()=>{for(const item of queue)remove(item.id);}}>Clear list</button></div></div>
       <ul className="batch-file-list">{queue.map((item,index)=><li key={item.id} className="batch-file-row">
-        <div className="batch-file-preview">{item.item?<RemoteImage src={item.item.url} alt="" sizes="64px" fallbackLabel={item.file.name}/>:<img src={item.preview} alt=""/>}</div>
+        <div className="batch-file-preview">{item.item?<RemoteImage src={item.item.url} alt="" sizes="64px" fallbackLabel={item.file.name}/>:<Image fill src={item.preview} alt="" sizes="48px" loading="lazy" unoptimized/>}</div>
         <div className="batch-file-info"><strong title={item.file.name}>{item.file.name}</strong><span>{(item.file.size/1024).toFixed(0)} KB · {item.status==="uploaded"?"Saved to library":item.status==="uploading"?"Uploading…":item.status==="failed"?item.error:item.status==="cancelled"?"Cancelled":"Ready to upload"}</span><div className="batch-progress" role="progressbar" aria-label={`${item.file.name} upload progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={item.status==="uploaded"?100:item.status==="uploading"?item.progress:0}><span style={{width:`${item.status==="uploaded"?100:item.progress}%`}}/></div></div>
         <label className="batch-file-role"><span className="visually-hidden">Role for {item.file.name}</span><select aria-label={`Role for ${item.file.name}`} disabled={item.status==="uploading"||item.status==="uploaded"} value={item.role} onChange={event=>update(item.id,{role:event.target.value})}>{roles.map(role=><option key={role.value} value={role.value}>{role.label}</option>)}</select></label>
         <span className={`batch-status batch-status-${item.status}`}>{item.status==="uploaded"?"Saved":item.status==="failed"?"Failed":item.status==="cancelled"?"Cancelled":item.status==="uploading"?"Uploading…":"Ready"}</span>

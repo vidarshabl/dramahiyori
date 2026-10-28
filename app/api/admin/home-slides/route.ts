@@ -3,6 +3,7 @@ import { badRequest, json, readJson, sameOriginOrReject } from "@/lib/api";
 import { database, listHomepageSlides } from "@/lib/db";
 import { persistHomeSlides } from "@/lib/home-slides";
 import { isValidMediaUrl } from "@/lib/security";
+import { invalidatePublicCatalogCache } from "@/lib/catalog";
 
 export const runtime="nodejs";
 const MAX_HOME_SLIDES=50;
@@ -34,6 +35,7 @@ export async function PATCH(request:Request) {
 
   try {
     const saved=await persistHomeSlides(database,admin.id,slides);
+    if(saved)invalidatePublicCatalogCache();
     return saved?json({saved:true,count:slides.length}):badRequest("One of these titles is no longer published. Reload the Home editor and try again.",409);
   } catch {
     return badRequest("Homepage photos could not be saved. Please try again.",500);

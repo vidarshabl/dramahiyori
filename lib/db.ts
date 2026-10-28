@@ -297,12 +297,16 @@ export type Title = {
   genres?:string[]; episode_count?:number; season_count?:number; has_playable_source?:number; first_playable_episode_id?:string|null;
 };
 
+export type TitleSummary = Pick<Title,"id"|"type"|"slug"|"title"|"alternative_title"|"synopsis"|"release_year"|"country"|"status"|"poster_url"|"backdrop_url"|"featured"|"demo"> & {
+  genres?:string[];has_playable_source:number;first_playable_episode_id:string|null;
+};
+
 export type GalleryImage = {id:string;image_url:string;caption:string;attribution:string;sort_order:number};
 export type CastCredit = {id:string;cast_member_id:string;slug:string;name:string;portrait_url:string;character_name:string;role_type:"cast"|"director"|"writer"|"producer";sort_order:number};
 export type CastMember = {id:string;slug:string;name:string;biography:string;nationality:string;profession:string;portrait_url:string;created_at:string;updated_at:string;gallery?:GalleryImage[];credits?:Array<CastCredit & {title_id:string;title_slug:string;title:string;title_type:"movie"|"series";release_year:number|null;poster_url:string}>};
 export type CastDirectoryItem = Pick<CastMember,"id"|"slug"|"name"|"profession"|"nationality"|"portrait_url"> & { title_count:number; known_for:string|null };
 
-export async function listTitles(filters: Record<string,string|undefined> = {}): Promise<Title[]> {
+export async function listTitles(filters: Record<string,string|undefined> = {}): Promise<TitleSummary[]> {
   const where = ["t.published=1"];
   const params: (string|number)[] = [];
   if (filters.sort === "featured") where.push("t.featured=1");
@@ -314,11 +318,10 @@ export async function listTitles(filters: Record<string,string|undefined> = {}):
   if (filters.sort === "popular") where.push("EXISTS (SELECT 1 FROM viewing_history vh WHERE vh.title_id=t.id AND vh.viewed_at>=datetime('now','-30 days'))");
   const sort = filters.sort === "alpha" ? "t.title COLLATE NOCASE ASC" : filters.sort === "oldest" ? "t.release_year ASC,t.title" : filters.sort === "popular" ? "(SELECT COUNT(*) FROM viewing_history vh WHERE vh.title_id=t.id AND vh.viewed_at>=datetime('now','-30 days')) DESC,t.title" : filters.sort === "featured" ? "t.featured_order ASC,t.updated_at DESC,t.title" : "t.created_at DESC,t.title";
   const page = Math.max(1,Number(filters.page || 1)); const limit = Math.min(48,Math.max(1,Number(filters.limit || 24)));
-  const rows = await database.prepare(`SELECT t.*, (SELECT COUNT(*) FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE s.title_id=t.id) AS episode_count,
-    (SELECT COUNT(*) FROM seasons s WHERE s.title_id=t.id) AS season_count,
+  const rows = await database.prepare(`SELECT t.id,t.type,t.slug,t.title,t.alternative_title,t.synopsis,t.release_year,t.country,t.status,t.poster_url,t.backdrop_url,t.featured,t.demo,
     CASE WHEN trim(t.video_url)<>'' OR EXISTS (SELECT 1 FROM episodes pe JOIN seasons ps ON ps.id=pe.season_id WHERE ps.title_id=t.id AND trim(pe.video_url)<>'') THEN 1 ELSE 0 END AS has_playable_source,
     (SELECT pe.id FROM episodes pe JOIN seasons ps ON ps.id=pe.season_id WHERE ps.title_id=t.id AND trim(pe.video_url)<>'' ORDER BY ps.season_number,pe.episode_number LIMIT 1) AS first_playable_episode_id
-    FROM titles t WHERE ${where.join(" AND ")} ORDER BY ${sort} LIMIT ? OFFSET ?`).all(...params,limit,(page-1)*limit) as Title[];
+    FROM titles t WHERE ${where.join(" AND ")} ORDER BY ${sort} LIMIT ? OFFSET ?`).all(...params,limit,(page-1)*limit) as TitleSummary[];
   if(!rows.length)return [];
   const genreRows=await database.prepare(`SELECT tg.title_id,g.name FROM title_genres tg JOIN genres g ON g.id=tg.genre_id WHERE tg.title_id IN (${rows.map(()=>"?").join(",")}) ORDER BY g.name COLLATE NOCASE`).all(...rows.map(row=>row.id)) as {title_id:string;name:string}[];
   const genreMap=new Map<string,string[]>();
@@ -326,12 +329,11 @@ export async function listTitles(filters: Record<string,string|undefined> = {}):
   return rows.map(row=>({...row,genres:genreMap.get(row.id)||[]}));
 }
 
-export type HomepageSlide = Title & {slide_id:string};
+export type HomepageSlide = TitleSummary & {slide_id:string};
 
 export async function listHomepageSlides(): Promise<HomepageSlide[]> {
-  const rows=await database.prepare(`SELECT hs.id AS slide_id,hs.sort_order AS slide_order,hs.backdrop_url AS slide_backdrop_url,t.*,
-    (SELECT COUNT(*) FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE s.title_id=t.id) AS episode_count,
-    (SELECT COUNT(*) FROM seasons s WHERE s.title_id=t.id) AS season_count,
+  const rows=await database.prepare(`SELECT hs.id AS slide_id,hs.sort_order AS slide_order,hs.backdrop_url AS slide_backdrop_url,
+    t.id,t.type,t.slug,t.title,t.alternative_title,t.synopsis,t.release_year,t.country,t.status,t.poster_url,t.featured,t.demo,
     CASE WHEN trim(t.video_url)<>'' OR EXISTS (SELECT 1 FROM episodes pe JOIN seasons ps ON ps.id=pe.season_id WHERE ps.title_id=t.id AND trim(pe.video_url)<>'') THEN 1 ELSE 0 END AS has_playable_source,
     (SELECT pe.id FROM episodes pe JOIN seasons ps ON ps.id=pe.season_id WHERE ps.title_id=t.id AND trim(pe.video_url)<>'' ORDER BY ps.season_number,pe.episode_number LIMIT 1) AS first_playable_episode_id
     FROM homepage_slides hs JOIN titles t ON t.id=hs.title_id
