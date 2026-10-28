@@ -2,16 +2,18 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect,useRef,useState } from "react";
+import { usePathname,useRouter } from "next/navigation";
 import type { TitleSummary } from "@/lib/db";
 import { IMAGE_BLUR_DATA_URL } from "@/lib/image-placeholder";
 import { useScrollReveal } from "./useScrollReveal";
 
 export function MediaCard({item,initialSaved=false}:{item:TitleSummary;initialSaved?:boolean}) {
   const [saved,setSaved]=useState(initialSaved),[busy,setBusy]=useState(false),[message,setMessage]=useState(""),[posterFailed,setPosterFailed]=useState(!item.poster_url),[posterLoaded,setPosterLoaded]=useState(!item.poster_url);
+  const pathname=usePathname(),router=useRouter();
   useEffect(()=>{setPosterFailed(!item.poster_url);setPosterLoaded(!item.poster_url);},[item.poster_url]);
   async function toggle(e:React.MouseEvent) {
     e.preventDefault();e.stopPropagation();if(busy)return;setBusy(true);setMessage("");
-    try {const response=await fetch(saved?"/api/watchlist?titleId="+encodeURIComponent(item.id):"/api/watchlist",{method:saved?"DELETE":"POST",headers:saved?undefined:{"Content-Type":"application/json"},body:saved?undefined:JSON.stringify({titleId:item.id})});const data=await response.json();if(response.status===401){setMessage("Sign in to save");setTimeout(()=>location.assign("/login?next="+encodeURIComponent(location.pathname)),700);}else if(!response.ok)throw new Error(data.error||"Could not update watchlist");else setSaved(!saved);}catch(error){setMessage(error instanceof Error?error.message:"Please try again.");}finally{setBusy(false);}
+    try {const response=await fetch(saved?"/api/watchlist?titleId="+encodeURIComponent(item.id):"/api/watchlist",{method:saved?"DELETE":"POST",headers:saved?undefined:{"Content-Type":"application/json"},body:saved?undefined:JSON.stringify({titleId:item.id})});const data=await response.json();if(response.status===401){setMessage("Sign in to save");setTimeout(()=>location.assign("/login?next="+encodeURIComponent(location.pathname)),700);}else if(!response.ok)throw new Error(data.error||"Could not update watchlist");else{setSaved(!saved);if(pathname==="/watchlist")router.refresh();}}catch(error){setMessage(error instanceof Error?error.message:"Please try again.");}finally{setBusy(false);}
   }
   return <article className="media-card">
     <Link href={"/title/"+item.slug} className="poster-link" aria-label={"View "+item.title}>

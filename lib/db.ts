@@ -105,7 +105,7 @@ class LocalProvider implements Provider {
   }
 }
 
-const MIGRATIONS = ["001_initial", "002_cast_gallery_media", "003_media_associations", "004_featured_order", "005_homepage_slides", "006_kverse_brand"] as const;
+const MIGRATIONS = ["001_initial", "002_cast_gallery_media", "003_media_associations", "004_featured_order", "005_homepage_slides", "006_kverse_brand", "007_deardrama_brand"] as const;
 
 function migrationSql(migration: typeof MIGRATIONS[number]): string {
   const file = path.join(process.cwd(), "db", "migrations", `${migration}.sql`);
@@ -280,7 +280,7 @@ async function seedDemoDataWith(provider: Provider): Promise<void> {
         }
       }
     }
-    for (const [key,value] of Object.entries({ brand:"Kverse", tagline:"A little room for the stories that stay.", contactEmail:"", about:"An independent K-drama discovery experience. Replace this sample copy with your platform details." })) {
+    for (const [key,value] of Object.entries({ brand:"DearDrama", tagline:"A little room for the stories that stay.", contactEmail:"", about:"An independent K-drama discovery experience. Replace this sample copy with your platform details." })) {
       await tx.run("INSERT OR IGNORE INTO site_settings(key,value) VALUES(?,?)", [key,value]);
     }
   });

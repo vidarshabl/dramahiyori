@@ -18,8 +18,8 @@ function safeBackdrop(value:string) {
 export async function generateMetadata({params}:{params:Promise<{slug:string}>}) {
   const {slug}=await params;
   const item=await getTitle(slug);
-  if(!item)return {title:"Story not found · Kverse"};
-  return {title:item.title+" · Kverse",description:item.synopsis,openGraph:{title:item.title,description:item.synopsis,images:item.backdrop_url?[item.backdrop_url]:[]}};
+  if(!item)return {title:"Story not found · DearDrama"};
+  return {title:item.title+" · DearDrama",description:item.synopsis,openGraph:{title:item.title,description:item.synopsis,images:item.backdrop_url?[item.backdrop_url]:[]}};
 }
 
 export default async function TitlePage({params}:{params:Promise<{slug:string}>}) {

@@ -62,6 +62,7 @@ test("admin creates and edits content; title and genre filters use saved data",a
 test("watchlist and playback progress persist and reject invalid references",async()=>{
  const saved=await request("/api/watchlist",{method:"POST",cookie:userCookie,body:{titleId}});assert.equal(saved.response.status,200);
  const list=await request("/api/watchlist",{cookie:userCookie});assert.ok(list.data.items.some(x=>x.id===titleId));
+ const watchlistPage=await fetch(base+"/watchlist",{headers:{Cookie:userCookie}});assert.equal(watchlistPage.status,200);assert.match(await watchlistPage.text(),/Remove from watchlist: Test Spring Letters/);
  const bad=await request("/api/progress",{method:"POST",cookie:userCookie,body:{titleId,episodeId:"missing-episode",positionSeconds:12,durationSeconds:400}});assert.equal(bad.response.status,400);
  const good=await request("/api/progress",{method:"POST",cookie:userCookie,body:{titleId,episodeId,positionSeconds:12,durationSeconds:400}});assert.equal(good.response.status,200,JSON.stringify(good.data));
  const progress=await request("/api/progress",{cookie:userCookie});assert.equal(progress.data.items[0].title_id,titleId);

@@ -29,8 +29,8 @@ test("an existing 001 database upgrades in place and serves cast, galleries, and
     const {isBlobStorageConfigured}=await import("./lib/blob-storage.ts");
     const {persistTitleEpisodes}=await import("./lib/title-episodes.ts");
     const applied=await database.prepare("SELECT id FROM schema_migrations ORDER BY id").all();
-    assert.deepEqual(applied.map(row=>row.id),["001_initial","002_cast_gallery_media","003_media_associations","004_featured_order","005_homepage_slides","006_kverse_brand"]);
-    assert.equal((await database.prepare("SELECT value FROM site_settings WHERE key='brand'").get()).value,"Kverse");
+    assert.deepEqual(applied.map(row=>row.id),["001_initial","002_cast_gallery_media","003_media_associations","004_featured_order","005_homepage_slides","006_kverse_brand","007_deardrama_brand"]);
+    assert.equal((await database.prepare("SELECT value FROM site_settings WHERE key='brand'").get()).value,"DearDrama");
     delete process.env.BLOB_READ_WRITE_TOKEN;delete process.env.BLOB_STORE_ID;delete process.env.VERCEL_OIDC_TOKEN;
     assert.equal(isBlobStorageConfigured(new Request("https://example.test",{headers:{"x-vercel-oidc-token":"runtime-oidc-token"}})),false);
     process.env.BLOB_STORE_ID="connected-store";
