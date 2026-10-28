@@ -29,6 +29,16 @@ function validTitle(body:Record<string,unknown>) {
   const runtimeInput=body.runtimeMinutes;
   const runtime=runtimeInput===""||runtimeInput==null?null:typeof runtimeInput==="number"||typeof runtimeInput==="string"?Number(runtimeInput):Number.NaN;
   if(runtime!==null&&(!Number.isSafeInteger(runtime)||runtime<1))return {error:"Runtime must be a positive whole number of minutes."};
+  const ratingInput=body.imdbRating;
+  const imdbRating=ratingInput===""||ratingInput==null?null:typeof ratingInput==="number"||typeof ratingInput==="string"?Number(ratingInput):Number.NaN;
+  if(imdbRating!==null&&(!Number.isFinite(imdbRating)||imdbRating<0||imdbRating>10||Math.abs(imdbRating*10-Math.round(imdbRating*10))>1e-8))return {error:"IMDb rating must be between 0 and 10, with at most one decimal place."};
+  const totalEpisodesInput=body.totalEpisodes;
+  const totalEpisodes=totalEpisodesInput===""||totalEpisodesInput==null?null:typeof totalEpisodesInput==="number"||typeof totalEpisodesInput==="string"?Number(totalEpisodesInput):Number.NaN;
+  if(totalEpisodes!==null&&(!Number.isSafeInteger(totalEpisodes)||totalEpisodes<1||totalEpisodes>500))return {error:"Total episodes must be a whole number from 1 to 500."};
+  const totalRuntimeInput=body.totalRuntimeMinutes;
+  const totalRuntimeMinutes=totalRuntimeInput===""||totalRuntimeInput==null?null:typeof totalRuntimeInput==="number"||typeof totalRuntimeInput==="string"?Number(totalRuntimeInput):Number.NaN;
+  if(totalRuntimeMinutes!==null&&(!Number.isSafeInteger(totalRuntimeMinutes)||totalRuntimeMinutes<1||totalRuntimeMinutes>500000))return {error:"Total runtime must be a positive whole number of minutes."};
+  const imdbRatingIsEstimate=body.imdbRatingIsEstimate===true;
   const languages=Array.isArray(body.subtitleLanguages)?body.subtitleLanguages.filter((x):x is string=>typeof x==="string").map(x=>x.trim().slice(0,50)).filter(Boolean).slice(0,20):[];
   const published=body.published===true;
   const featured=body.featured===true;
@@ -63,7 +73,7 @@ function validTitle(body:Record<string,unknown>) {
       if(typeof ep?.thumbnailUrl==="string"&&ep.thumbnailUrl&&!isValidMediaUrl(ep.thumbnailUrl))return {error:`Episode ${i+1} has an invalid thumbnail URL.`};
     }
   }
-  return {title,type,synopsis,releaseYear,poster,backdrop,video,genres,status,country,alternative,rating,runtime,languages,published,featured,featuredOrder,episodes,gallery};
+  return {title,type,synopsis,releaseYear,poster,backdrop,video,genres,status,country,alternative,rating,runtime,imdbRating,imdbRatingIsEstimate,totalEpisodes,totalRuntimeMinutes,languages,published,featured,featuredOrder,episodes,gallery};
 }
 async function audit(db:DatabaseAdapter,adminId:string,action:string,id:string,details:unknown={}) {
   await db.prepare("INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)").run(adminId,action,"title",id,JSON.stringify(details));
@@ -114,8 +124,8 @@ export async function POST(request:Request) {
   const id=randomUUID();
   try {
     await database.transaction(async tx=>{
-      await tx.prepare(`INSERT INTO titles(id,type,slug,title,alternative_title,synopsis,release_year,country,status,runtime_minutes,poster_url,backdrop_url,content_rating,subtitle_languages,video_url,published,featured,featured_order,demo,updated_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,CURRENT_TIMESTAMP)`).run(id,data.type,slug,data.title,data.alternative,data.synopsis,data.releaseYear,data.country,data.status,data.runtime,data.poster,data.backdrop,data.rating,JSON.stringify(data.languages),data.video,data.published?1:0,data.featured?1:0,data.featuredOrder);
+      await tx.prepare(`INSERT INTO titles(id,type,slug,title,alternative_title,synopsis,release_year,country,status,runtime_minutes,imdb_rating,imdb_rating_is_estimate,total_episodes,total_runtime_minutes,poster_url,backdrop_url,content_rating,subtitle_languages,video_url,published,featured,featured_order,demo,updated_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,CURRENT_TIMESTAMP)`).run(id,data.type,slug,data.title,data.alternative,data.synopsis,data.releaseYear,data.country,data.status,data.runtime,data.imdbRating,data.imdbRatingIsEstimate?1:0,data.totalEpisodes,data.totalRuntimeMinutes,data.poster,data.backdrop,data.rating,JSON.stringify(data.languages),data.video,data.published?1:0,data.featured?1:0,data.featuredOrder);
       await writeGenres(tx,id,data.genres); await persistTitleEpisodes(tx,id,data.type==="series"?data.episodes:[]); await writeGallery(tx,id,data.gallery);
       await syncHomepageSlide(tx,id,data.featured&&data.published,data.backdrop,data.featuredOrder);
       await recordTitleImageUsages(tx,id,{poster:data.poster,backdrop:data.backdrop,gallery:data.gallery});
@@ -134,7 +144,7 @@ export async function PUT(request:Request) {
   const slug=typeof body.slug==="string"&&body.slug.trim()?slugify(body.slug.trim()):slugify(data.title);
   try {
     const saved=await database.transaction(async tx=>{
-      const result=await tx.prepare(`UPDATE titles SET type=?,slug=?,title=?,alternative_title=?,synopsis=?,release_year=?,country=?,status=?,runtime_minutes=?,poster_url=?,backdrop_url=?,content_rating=?,subtitle_languages=?,video_url=?,published=?,featured=?,featured_order=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(data.type,slug,data.title,data.alternative,data.synopsis,data.releaseYear,data.country,data.status,data.runtime,data.poster,data.backdrop,data.rating,JSON.stringify(data.languages),data.video,data.published?1:0,data.featured?1:0,data.featuredOrder,titleId);
+      const result=await tx.prepare(`UPDATE titles SET type=?,slug=?,title=?,alternative_title=?,synopsis=?,release_year=?,country=?,status=?,runtime_minutes=?,imdb_rating=?,imdb_rating_is_estimate=?,total_episodes=?,total_runtime_minutes=?,poster_url=?,backdrop_url=?,content_rating=?,subtitle_languages=?,video_url=?,published=?,featured=?,featured_order=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(data.type,slug,data.title,data.alternative,data.synopsis,data.releaseYear,data.country,data.status,data.runtime,data.imdbRating,data.imdbRatingIsEstimate?1:0,data.totalEpisodes,data.totalRuntimeMinutes,data.poster,data.backdrop,data.rating,JSON.stringify(data.languages),data.video,data.published?1:0,data.featured?1:0,data.featuredOrder,titleId);
       if(!Number(result.changes))return false;
        await writeGenres(tx,titleId,data.genres); await persistTitleEpisodes(tx,titleId,data.type==="series"?data.episodes:[]); await writeGallery(tx,titleId,data.gallery);
        await syncHomepageSlide(tx,titleId,data.featured&&data.published,data.backdrop,data.featuredOrder);

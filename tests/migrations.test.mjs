@@ -29,7 +29,10 @@ test("an existing 001 database upgrades in place and serves cast, galleries, and
     const {isBlobStorageConfigured}=await import("./lib/blob-storage.ts");
     const {persistTitleEpisodes}=await import("./lib/title-episodes.ts");
     const applied=await database.prepare("SELECT id FROM schema_migrations ORDER BY id").all();
-    assert.deepEqual(applied.map(row=>row.id),["001_initial","002_cast_gallery_media","003_media_associations","004_featured_order","005_homepage_slides","006_kverse_brand","007_deardrama_brand"]);
+    assert.deepEqual(applied.map(row=>row.id),["001_initial","002_cast_gallery_media","003_media_associations","004_featured_order","005_homepage_slides","006_kverse_brand","007_deardrama_brand","008_title_catalog_metrics"]);
+    await database.prepare("UPDATE titles SET imdb_rating=?,imdb_rating_is_estimate=?,total_episodes=?,total_runtime_minutes=? WHERE id=?").run(8.2,0,16,1120,"migration-title");
+    const titleMetrics=await database.prepare("SELECT imdb_rating,imdb_rating_is_estimate,total_episodes,total_runtime_minutes FROM titles WHERE id=?").get("migration-title");
+    assert.deepEqual([titleMetrics.imdb_rating,titleMetrics.imdb_rating_is_estimate,titleMetrics.total_episodes,titleMetrics.total_runtime_minutes],[8.2,0,16,1120]);
     assert.equal((await database.prepare("SELECT value FROM site_settings WHERE key='brand'").get()).value,"DearDrama");
     delete process.env.BLOB_READ_WRITE_TOKEN;delete process.env.BLOB_STORE_ID;delete process.env.VERCEL_OIDC_TOKEN;
     assert.equal(isBlobStorageConfigured(new Request("https://example.test",{headers:{"x-vercel-oidc-token":"runtime-oidc-token"}})),false);

@@ -36,13 +36,32 @@ test("public and admin authentication remain separate",async()=>{
  const userOnCast=await request("/api/admin/cast",{cookie:userCookie});assert.equal(userOnCast.response.status,403);
  const userOnMedia=await request("/api/admin/media",{cookie:userCookie});assert.equal(userOnMedia.response.status,403);
  const noSession=await request("/api/admin/titles");assert.equal(noSession.response.status,403);
+ const noSessionOnImport=await request("/api/admin/catalog-import",{method:"POST"});assert.equal(noSessionOnImport.response.status,403);
+ const viewerOnImport=await request("/api/admin/catalog-import",{method:"POST",cookie:userCookie});assert.equal(viewerOnImport.response.status,403);
  const wrongPublic=await request("/api/auth/login",{method:"POST",body:{email:adminEmail,password:adminPassword}});
  assert.equal(wrongPublic.response.status,401,"admin credentials do not use the public user login");
 });
 
+test("administrator imports the supplied drama catalog idempotently with static artwork and metadata",async()=>{
+ const imported=await request("/api/admin/catalog-import",{method:"POST",cookie:adminCookie});
+ assert.equal(imported.response.status,200,JSON.stringify(imported.data));
+ assert.equal(imported.data.created,10);assert.equal(imported.data.updated,0);assert.equal(imported.data.total,10);
+ const saved=await request("/api/admin/titles",{cookie:adminCookie});
+ const queen=saved.data.items.find(item=>item.slug==="queen-of-tears");assert.ok(queen);
+ assert.equal(queen.imdb_rating,8.2);assert.equal(queen.total_episodes,16);assert.equal(queen.total_runtime_minutes,1120);
+ assert.equal(queen.runtime_minutes,70);assert.equal(queen.poster_url,"/drama-media/queen-of-tears-poster.jpg");
+ assert.ok(queen.genres.includes("Romance"));assert.deepEqual(queen.episodes,[]);
+ const titlePage=await fetch(base+"/title/queen-of-tears");assert.equal(titlePage.status,200);
+ const titleHtml=await titlePage.text();assert.match(titleHtml,/8\.2\/10/);assert.match(titleHtml,/1,120 min total/);assert.match(titleHtml,/16 episodes/);assert.match(titleHtml,/Kim Soo-hyun/);
+ const artwork=await fetch(base+"/drama-media/queen-of-tears-poster.jpg");assert.equal(artwork.status,200);assert.match(artwork.headers.get("content-type")||"",/image\/jpeg/);
+ const rerun=await request("/api/admin/catalog-import",{method:"POST",cookie:adminCookie});assert.equal(rerun.response.status,200);
+ assert.equal(rerun.data.created,0);assert.equal(rerun.data.updated,10);assert.equal(rerun.data.castLinked,0);
+ const once=await request("/api/admin/titles",{cookie:adminCookie});assert.equal(once.data.items.filter(item=>item.slug==="queen-of-tears").length,1);
+});
+
 test("admin creates and edits content; title and genre filters use saved data",async()=>{
  slug="test-title-"+randomUUID().slice(0,8);
- const body={title:"Test Spring Letters",type:"series",slug,synopsis:"A test record for CRUD verification.",releaseYear:2026,country:"South Korea",status:"ongoing",genres:["Romance","Test Genre"],published:true,featured:false,videoUrl:"https://ia800.us.archive.org/download/test/video.mp4",gallery:[{url:"https://ia800.us.archive.org/download/test/still.jpg",caption:"Test still",attribution:"Test collection"}],episodes:[{title:"Pilot",synopsis:"Test episode.",durationMinutes:28,videoUrl:"https://ia800.us.archive.org/download/test/episode.mp4"}]};
+ const body={title:"Test Spring Letters",type:"series",slug,synopsis:"A test record for CRUD verification.",releaseYear:2026,country:"South Korea",status:"ongoing",genres:["Romance","Test Genre"],published:true,featured:false,posterUrl:"/drama-media/queen-of-tears-poster.jpg",backdropUrl:"/drama-media/queen-of-tears-backdrop.jpg",videoUrl:"https://ia800.us.archive.org/download/test/video.mp4",gallery:[{url:"https://ia800.us.archive.org/download/test/still.jpg",caption:"Test still",attribution:"Test collection"}],episodes:[{title:"Pilot",synopsis:"Test episode.",durationMinutes:28,videoUrl:"https://ia800.us.archive.org/download/test/episode.mp4"}]};
  const created=await request("/api/admin/titles",{method:"POST",cookie:adminCookie,body});assert.equal(created.response.status,201,JSON.stringify(created.data));titleId=created.data.id;
  const lookup=await request("/api/titles?q="+encodeURIComponent("Test Spring"));assert.equal(lookup.data.items[0].id,titleId);
  const genre=await request("/api/titles?genre="+encodeURIComponent("Test Genre"));assert.ok(genre.data.items.some(item=>item.id===titleId));

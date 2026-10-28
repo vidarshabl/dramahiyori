@@ -12,6 +12,7 @@ export const dynamic="force-dynamic";
 
 function safeBackdrop(value:string) {
   if(!value||!isValidMediaUrl(value))return "";
+  if(value.startsWith("/drama-media/"))return value;
   try{return new URL(value).toString();}catch{return "";}
 }
 
@@ -33,7 +34,7 @@ export default async function TitlePage({params}:{params:Promise<{slug:string}>}
   const playable=Boolean(validTitleStream||episodes.some(episode=>episode.video_url&&isValidMediaUrl(episode.video_url)));
   const watchHref="/watch?"+new URLSearchParams({slug:item.slug,...(firstPlayableEpisode?{episode:firstPlayableEpisode.id}:{})}).toString();
   const backdrop=safeBackdrop(item.backdrop_url);
-  const detailFacts=[item.release_year?String(item.release_year):"",item.country||"",item.status==="ongoing"?"Ongoing":item.status==="upcoming"?"Upcoming":"Completed",item.runtime_minutes?`${item.runtime_minutes} min`:"",item.content_rating||""].filter(Boolean);
+  const detailFacts=[item.release_year?String(item.release_year):"",item.country||"",item.status==="ongoing"?"Ongoing":item.status==="upcoming"?"Upcoming":"Completed",item.runtime_minutes?`${item.runtime_minutes} min${item.type==="series"?" / episode":""}`:"",item.type==="series"&&item.total_episodes?`${item.total_episodes} episodes`:"",item.total_runtime_minutes?`${item.total_runtime_minutes.toLocaleString()} min total`:"",item.imdb_rating!=null?`IMDb${item.imdb_rating_is_estimate?" approx.":""} ${Number(item.imdb_rating).toFixed(1)}/10`:"",item.content_rating||""].filter(Boolean);
 
   return <main className="detail-page">
     <section className="detail-hero" aria-hidden="true" style={{backgroundImage:backdrop?`linear-gradient(90deg,rgba(8,8,13,.94),rgba(8,8,13,.62) 52%,rgba(8,8,13,.15)),linear-gradient(0deg,#08080d,transparent 60%),url("${backdrop}")`:`radial-gradient(ellipse at 75% 20%,rgba(232,62,104,.15),transparent 34%),linear-gradient(180deg,#17111d,#08080d)`}}/>
@@ -66,7 +67,8 @@ export default async function TitlePage({params}:{params:Promise<{slug:string}>}
     </section>}
 
     {item.type==="series"&&<section className="episode-section">
-      <div className="section-heading"><div><span className="eyebrow">THE STORY SO FAR</span><h2>Episodes</h2></div><span className="episode-total">{episodes.length} {episodes.length===1?"episode":"episodes"}</span></div>
+      <div className="section-heading"><div><span className="eyebrow">THE STORY SO FAR</span><h2>Episodes</h2></div><span className="episode-total">{item.total_episodes??episodes.length} {(item.total_episodes??episodes.length)===1?"episode":"episodes"}</span></div>
+      {!episodes.length&&<p className="episode-guide-note">Episode listings and authorized video sources have not been added yet.</p>}
       {item.seasons?.map((season:any)=><div className="season-block" key={season.id}><h3>{season.name}</h3><div className="episode-list">{season.episodes.map((episode:any)=>{
         const source=episode.video_url||item.video_url;
         const canPlay=Boolean(source&&isValidMediaUrl(source));

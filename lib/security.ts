@@ -23,6 +23,7 @@ export const tokenHash = (token:string) => createHash("sha256").update(token).di
 
 export function isAllowedMediaUrl(value:string) {
   if (!value) return true;
+  if (isBundledDramaImage(value)) return true;
   try {
     const url = new URL(value);
     if (url.protocol !== "https:" && url.protocol !== "http:") return false;
@@ -37,11 +38,21 @@ export function isAllowedMediaUrl(value:string) {
 
 export function isValidMediaUrl(value:string) {
   if (!value) return true;
+  if (isBundledDramaImage(value)) return true;
   try {
     const url = new URL(value);
     if (url.protocol !== "https:" && url.protocol !== "http:") return false;
     return process.env.NODE_ENV !== "production" || url.protocol === "https:";
   } catch { return false; }
+}
+
+/** Same-origin, versioned artwork shipped from this app's public directory. */
+function isBundledDramaImage(value:string) {
+  return /^\/drama-media\/[a-z0-9][a-z0-9._/-]*\.(?:jpe?g|png|webp|avif)$/i.test(value)
+    && !value.includes("..")
+    && !value.includes("\\")
+    && !value.includes("?")
+    && !value.includes("#");
 }
 
 export function checkSameOrigin(request:Request) {

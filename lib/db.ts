@@ -105,7 +105,7 @@ class LocalProvider implements Provider {
   }
 }
 
-const MIGRATIONS = ["001_initial", "002_cast_gallery_media", "003_media_associations", "004_featured_order", "005_homepage_slides", "006_kverse_brand", "007_deardrama_brand"] as const;
+const MIGRATIONS = ["001_initial", "002_cast_gallery_media", "003_media_associations", "004_featured_order", "005_homepage_slides", "006_kverse_brand", "007_deardrama_brand", "008_title_catalog_metrics"] as const;
 
 function migrationSql(migration: typeof MIGRATIONS[number]): string {
   const file = path.join(process.cwd(), "db", "migrations", `${migration}.sql`);
@@ -292,7 +292,7 @@ export async function seedDemoData(): Promise<void> {
 
 export type Title = {
   id:string; type:"movie"|"series"; slug:string; title:string; alternative_title:string; synopsis:string; release_year:number|null;
-  country:string; status:"ongoing"|"completed"|"upcoming"; runtime_minutes:number|null; poster_url:string; backdrop_url:string;
+  country:string; status:"ongoing"|"completed"|"upcoming"; runtime_minutes:number|null; imdb_rating:number|null; imdb_rating_is_estimate:number; total_episodes:number|null; total_runtime_minutes:number|null; poster_url:string; backdrop_url:string;
   content_rating:string; subtitle_languages:string; video_url:string; published:number; featured:number; featured_order:number; demo:number;
   genres?:string[]; episode_count?:number; season_count?:number; has_playable_source?:number; first_playable_episode_id?:string|null;
 };

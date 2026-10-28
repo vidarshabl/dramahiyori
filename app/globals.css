@@ -249,6 +249,7 @@ button{color:inherit}
 .action-message{font-size:10px;color:#f3c1c4}
 .episode-section,.detail-related{position:relative;z-index:1;max-width:1160px;margin:38px auto 0;padding:0 48px}
 .episode-total{font-size:10px;color:#a9a7b3}
+.episode-guide-note{margin:10px 0 0;color:#aaa4b0;font-size:11px;line-height:1.6}
 .season-block{margin:18px 0 30px}
 .season-block h3{font:500 17px var(--serif);margin:0 0 12px;color:#f0e9e4}
 .episode-list{border-top:1px solid var(--line)}
