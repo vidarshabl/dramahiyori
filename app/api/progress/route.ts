@@ -4,8 +4,8 @@ import { database } from "@/lib/db";
 export const runtime="nodejs";
 export async function GET() {
   const user=await currentUser(); if(!user)return json({items:[]});
-  const items=await database.prepare(`SELECT p.title_id,p.episode_id,p.position_seconds,p.duration_seconds,p.updated_at,t.slug,t.title,t.poster_url,t.type,
-    e.episode_number FROM watch_progress p JOIN titles t ON t.id=p.title_id LEFT JOIN episodes e ON e.id=p.episode_id
+  const items=await database.prepare(`SELECT p.title_id,p.episode_id,p.position_seconds,p.duration_seconds,p.updated_at,t.slug,t.title,t.poster_url,t.catalog_type AS type,
+    e.episode_number,s.season_number FROM watch_progress p JOIN titles t ON t.id=p.title_id LEFT JOIN episodes e ON e.id=p.episode_id LEFT JOIN seasons s ON s.id=e.season_id
     WHERE p.user_id=? AND t.published=1 ORDER BY p.updated_at DESC LIMIT 20`).all(user.id);
   return json({items});
 }

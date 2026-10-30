@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 export const runtime="nodejs";
 const slugify=(s:string)=>s.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
 type GalleryInput={url:string;caption:string;attribution:string};
+type SubtitleInput={language:string;label:string;fileUrl:string;kind:"subtitles"|"captions";isDefault:boolean;timingOffset:number};
 function validTitle(body:Record<string,unknown>) {
   const title=typeof body.title==="string"?body.title.trim():"";
   const type=body.type==="movie"||body.type==="series"||body.type==="variety"?body.type:null;
@@ -44,6 +45,21 @@ function validTitle(body:Record<string,unknown>) {
   if(totalRuntimeMinutes!==null&&(!Number.isSafeInteger(totalRuntimeMinutes)||totalRuntimeMinutes<1||totalRuntimeMinutes>500000))return {error:"Total runtime must be a positive whole number of minutes."};
   const imdbRatingIsEstimate=body.imdbRatingIsEstimate===true;
   const languages=Array.isArray(body.subtitleLanguages)?body.subtitleLanguages.filter((x):x is string=>typeof x==="string").map(x=>x.trim().slice(0,50)).filter(Boolean).slice(0,20):[];
+  let titleSubtitles:SubtitleInput[]|null=null;
+  if(body.titleSubtitles!==undefined) {
+    if(!Array.isArray(body.titleSubtitles)||body.titleSubtitles.length>20)return {error:"A title can have up to 20 subtitle tracks."};
+    titleSubtitles=[];
+    for(const [index,value] of body.titleSubtitles.entries()) {
+      const track=value as Record<string,unknown>;
+      const language=typeof track?.language==="string"?track.language.trim():"";
+      const label=typeof track?.label==="string"?track.label.trim():"";
+      const fileUrl=typeof track?.fileUrl==="string"?track.fileUrl.trim():"";
+      const kind=track?.kind==="captions"?"captions":"subtitles";
+      const timingOffset=track?.timingOffset===undefined?0:Number(track.timingOffset);
+      if(language.length<2||language.length>20||!label||label.length>80||!isAllowedMediaUrl(fileUrl)||(track?.kind!==undefined&&!['subtitles','captions'].includes(String(track.kind)))||(track?.isDefault!==undefined&&typeof track.isDefault!=="boolean")||!Number.isFinite(timingOffset)||timingOffset< -60||timingOffset>60)return {error:`Check title subtitle track ${index+1}; use a language, label, and valid HTTPS WebVTT URL.`};
+      titleSubtitles.push({language,label,fileUrl,kind,isDefault:track.isDefault===true,timingOffset});
+    }
+  }
   const published=body.published===true;
   const featured=body.featured===true;
   const featuredOrder=body.featuredOrder===""||body.featuredOrder==null?0:Number(body.featuredOrder);
@@ -81,7 +97,7 @@ function validTitle(body:Record<string,unknown>) {
       if(typeof ep?.thumbnailUrl==="string"&&ep.thumbnailUrl&&!isValidMediaUrl(ep.thumbnailUrl))return {error:`Episode ${i+1} has an invalid thumbnail URL.`};
     }
   }
-  return {title,type,synopsis,releaseYear,poster,backdrop,video,genres,status,country,airDay,sinhalaTitle,hasSinhalaSubtitles,alternative,rating,runtime,imdbRating,imdbRatingIsEstimate,totalEpisodes,totalRuntimeMinutes,languages,published,featured,featuredOrder,episodes,gallery};
+  return {title,type,synopsis,releaseYear,poster,backdrop,video,genres,status,country,airDay,sinhalaTitle,hasSinhalaSubtitles,alternative,rating,runtime,imdbRating,imdbRatingIsEstimate,totalEpisodes,totalRuntimeMinutes,languages,published,featured,featuredOrder,episodes,gallery,titleSubtitles};
 }
 async function audit(db:DatabaseAdapter,adminId:string,action:string,id:string,details:unknown={}) {
   await db.prepare("INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)").run(adminId,action,"title",id,JSON.stringify(details));
@@ -111,6 +127,14 @@ async function syncLegacyTitleSource(db:DatabaseAdapter,titleId:string,url:strin
   await db.prepare(`INSERT INTO video_sources(id,title_id,kind,quality,url,priority,status)
     VALUES(?,?,'mp4','auto',?,-1000,'active') ON CONFLICT(id) DO UPDATE SET url=excluded.url,status='active',updated_at=CURRENT_TIMESTAMP`).run(id,titleId,url);
 }
+async function writeTitleSubtitles(db:DatabaseAdapter,titleId:string,tracks:SubtitleInput[]|null) {
+  if(tracks===null)return;
+  await db.prepare("DELETE FROM content_subtitle_tracks WHERE title_id=?").run(titleId);
+  for(const track of tracks) {
+    await db.prepare("INSERT INTO content_subtitle_tracks(id,title_id,language,label,vtt_url,kind,is_default,timing_offset) VALUES(?,?,?,?,?,?,?,?)")
+      .run(randomUUID(),titleId,track.language,track.label,track.fileUrl,track.kind,track.isDefault?1:0,track.timingOffset);
+  }
+}
 export async function GET(request:Request) {
   const admin=await currentAdmin(); if(!admin)return badRequest("Administrator access is required.",403);
   const requestedId=new URL(request.url).searchParams.get("id");
@@ -120,12 +144,13 @@ export async function GET(request:Request) {
   if(requestedId&&!items.length)return badRequest("That title could not be found.",404);
   const expanded=await Promise.all(items.map(async t=>{
     t.type=t.catalog_type||t.type;
-    const [genres,episodes,gallery]=await Promise.all([
+    const [genres,episodes,gallery,titleSubtitles]=await Promise.all([
       database.prepare("SELECT g.name FROM genres g JOIN title_genres tg ON tg.genre_id=g.id WHERE tg.title_id=?").all(t.id) as Promise<{name:string}[]>,
-      database.prepare("SELECT e.id,e.title,e.episode_number,e.synopsis,e.thumbnail_url,e.duration_minutes,e.video_url,e.air_date,e.publish_at,e.published,e.created_at,s.season_number FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE s.title_id=? ORDER BY s.season_number,e.episode_number").all(t.id) as Promise<{id:string;[key:string]:any}[]>,
-      database.prepare("SELECT id,image_url,caption,attribution,sort_order FROM title_gallery WHERE title_id=? ORDER BY sort_order,id").all(t.id) as Promise<Record<string,any>[]>
+      database.prepare("SELECT e.id,e.title,e.episode_number,e.synopsis,e.thumbnail_url,e.duration_minutes,e.video_url,e.air_date,e.publish_at,e.published,e.created_at,s.season_number,COALESCE((SELECT quality FROM video_sources WHERE id='legacy-episode-'||e.id),'auto') AS video_quality FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE s.title_id=? ORDER BY s.season_number,e.episode_number").all(t.id) as Promise<{id:string;[key:string]:any}[]>,
+      database.prepare("SELECT id,image_url,caption,attribution,sort_order FROM title_gallery WHERE title_id=? ORDER BY sort_order,id").all(t.id) as Promise<Record<string,any>[]>,
+      database.prepare("SELECT language,label,vtt_url AS fileUrl,kind,is_default AS isDefault,timing_offset AS timingOffset FROM content_subtitle_tracks WHERE title_id=? ORDER BY is_default DESC,language").all(t.id) as Promise<Record<string,any>[]>
     ]);
-    return {...t,genres:genres.map(x=>x.name),gallery,episodes:await Promise.all(episodes.map(async e=>({...e,subtitles:await database.prepare("SELECT language,label,vtt_url AS fileUrl,kind,is_default AS isDefault,timing_offset AS timingOffset FROM content_subtitle_tracks WHERE episode_id=? ORDER BY is_default DESC,language").all(e.id)})))};
+    return {...t,genres:genres.map(x=>x.name),gallery,titleSubtitles,episodes:await Promise.all(episodes.map(async e=>({...e,subtitles:await database.prepare("SELECT language,label,vtt_url AS fileUrl,kind,is_default AS isDefault,timing_offset AS timingOffset FROM content_subtitle_tracks WHERE episode_id=? ORDER BY is_default DESC,language").all(e.id)})))};
   }));
   return json({items:expanded});
 }
@@ -142,6 +167,7 @@ export async function POST(request:Request) {
       await tx.prepare(`INSERT INTO titles(id,type,catalog_type,slug,title,alternative_title,sinhala_title,synopsis,release_year,country,air_day,has_sinhala_subtitles,status,runtime_minutes,imdb_rating,imdb_rating_is_estimate,total_episodes,total_runtime_minutes,poster_url,backdrop_url,content_rating,subtitle_languages,video_url,published,featured,featured_order,demo,updated_at)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,CURRENT_TIMESTAMP)`).run(id,data.type==="variety"?"series":data.type,data.type,slug,data.title,data.alternative,data.sinhalaTitle,data.synopsis,data.releaseYear,data.country,data.airDay,data.hasSinhalaSubtitles?1:0,data.status,data.runtime,data.imdbRating,data.imdbRatingIsEstimate?1:0,data.totalEpisodes,data.totalRuntimeMinutes,data.poster,data.backdrop,data.rating,JSON.stringify(data.languages),data.video,data.published?1:0,data.featured?1:0,data.featuredOrder);
       await syncLegacyTitleSource(tx,id,data.video);
+      await writeTitleSubtitles(tx,id,data.titleSubtitles);
       await writeGenres(tx,id,data.genres); await persistTitleEpisodes(tx,id,data.type!=="movie"?data.episodes:[]); await writeGallery(tx,id,data.gallery);
       await syncHomepageSlide(tx,id,data.featured&&data.published,data.backdrop,data.featuredOrder);
       await recordTitleImageUsages(tx,id,{poster:data.poster,backdrop:data.backdrop,gallery:data.gallery});
@@ -163,6 +189,7 @@ export async function PUT(request:Request) {
       const result=await tx.prepare(`UPDATE titles SET type=?,catalog_type=?,slug=?,title=?,alternative_title=?,sinhala_title=?,synopsis=?,release_year=?,country=?,air_day=?,has_sinhala_subtitles=?,status=?,runtime_minutes=?,imdb_rating=?,imdb_rating_is_estimate=?,total_episodes=?,total_runtime_minutes=?,poster_url=?,backdrop_url=?,content_rating=?,subtitle_languages=?,video_url=?,published=?,featured=?,featured_order=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(data.type==="variety"?"series":data.type,data.type,slug,data.title,data.alternative,data.sinhalaTitle,data.synopsis,data.releaseYear,data.country,data.airDay,data.hasSinhalaSubtitles?1:0,data.status,data.runtime,data.imdbRating,data.imdbRatingIsEstimate?1:0,data.totalEpisodes,data.totalRuntimeMinutes,data.poster,data.backdrop,data.rating,JSON.stringify(data.languages),data.video,data.published?1:0,data.featured?1:0,data.featuredOrder,titleId);
       if(!Number(result.changes))return false;
        await syncLegacyTitleSource(tx,titleId,data.video);
+       await writeTitleSubtitles(tx,titleId,data.titleSubtitles);
        await writeGenres(tx,titleId,data.genres); await persistTitleEpisodes(tx,titleId,data.type!=="movie"?data.episodes:[]); await writeGallery(tx,titleId,data.gallery);
        await syncHomepageSlide(tx,titleId,data.featured&&data.published,data.backdrop,data.featuredOrder);
        await recordTitleImageUsages(tx,titleId,{poster:data.poster,backdrop:data.backdrop,gallery:data.gallery});

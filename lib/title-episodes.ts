@@ -36,6 +36,7 @@ export async function persistTitleEpisodes(db: DatabaseAdapter, titleId: string,
       thumbnailUrl,
       durationMinutes: Number.isSafeInteger(rawRuntime) && rawRuntime > 0 ? rawRuntime : null,
       videoUrl: typeof episode.videoUrl === "string" ? episode.videoUrl.trim() : "",
+      videoQuality: ["480p","720p","1080p"].includes(String(episode.videoQuality)) ? String(episode.videoQuality) : "auto",
       airDate: typeof episode.airDate === "string" && episode.airDate ? episode.airDate : null,
       publishAt,
       published: episode.published === false ? 0 : 1,
@@ -82,8 +83,8 @@ export async function persistTitleEpisodes(db: DatabaseAdapter, titleId: string,
     const legacySourceId = `legacy-episode-${episode.id}`;
     if (episode.videoUrl) {
       await db.prepare(`INSERT INTO video_sources(id,episode_id,kind,quality,url,priority,status)
-        VALUES(?,?,'mp4','auto',?,-1000,'active') ON CONFLICT(id) DO UPDATE SET url=excluded.url,status='active',updated_at=CURRENT_TIMESTAMP`)
-        .run(legacySourceId, episode.id, episode.videoUrl);
+        VALUES(?,?,'mp4',?,?,-1000,'active') ON CONFLICT(id) DO UPDATE SET quality=excluded.quality,url=excluded.url,status='active',updated_at=CURRENT_TIMESTAMP`)
+        .run(legacySourceId, episode.id, episode.videoQuality, episode.videoUrl);
     } else {
       await db.prepare("DELETE FROM video_sources WHERE id=?").run(legacySourceId);
     }
