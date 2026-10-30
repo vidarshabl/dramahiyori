@@ -1,5 +1,5 @@
 import { revalidateTag, unstable_cache } from "next/cache";
-import { database, getTitle as loadTitle, listHomepageSlides as loadHomepageSlides, listTitles as loadTitles } from "@/lib/db";
+import { database, getTitle as loadTitle, listHomepageSlides as loadHomepageSlides, listRecentEpisodeReleases as loadEpisodeReleases, listTitles as loadTitles, listWeeklySchedule as loadWeeklySchedule } from "@/lib/db";
 
 const CATALOG_TAG = "public-catalog";
 const TITLE_FILTER_KEYS = ["q","genre","country","year","type","status","sort","page","limit","hasSinhalaSubtitles"] as const;
@@ -30,6 +30,8 @@ const cachedBrowseOptions = unstable_cache(async () => {
   ]);
   return {genres:genreRows.map(row=>row.name),years:yearRows.map(row=>row.year),countries:countryRows.map(row=>row.country)};
 }, ["public-browse-options-v1"], { revalidate: 3600, tags: [CATALOG_TAG] });
+const cachedEpisodeReleases = unstable_cache(async (limit:number) => loadEpisodeReleases(limit), ["public-episode-releases-v1"], { revalidate: 300, tags: [CATALOG_TAG] });
+const cachedWeeklySchedule = unstable_cache(loadWeeklySchedule, ["public-weekly-schedule-v1"], { revalidate: 300, tags: [CATALOG_TAG] });
 
 export async function listTitles(filters:Record<string,string|undefined>={}) {
   const normalized=Object.fromEntries(TITLE_FILTER_KEYS.map(key=>[key,filters[key]?.trim()||undefined])) as Record<string,string|undefined>;
@@ -40,4 +42,6 @@ export async function listTitles(filters:Record<string,string|undefined>={}) {
 export const listHomepageSlides=()=>cachedHomepageSlides();
 export const getTitle=(slug:string)=>cachedTitleDetails(slug);
 export const listBrowseOptions=()=>cachedBrowseOptions();
+export const listRecentEpisodeReleases=(limit=12)=>cachedEpisodeReleases(limit);
+export const listWeeklySchedule=()=>cachedWeeklySchedule();
 export function invalidatePublicCatalogCache(){revalidateTag(CATALOG_TAG);}

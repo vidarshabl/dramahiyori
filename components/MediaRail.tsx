@@ -7,7 +7,7 @@ import type { TitleSummary } from "@/lib/db";
 import { IMAGE_BLUR_DATA_URL } from "@/lib/image-placeholder";
 import { useScrollReveal } from "./useScrollReveal";
 
-export function MediaCard({item,initialSaved=false}:{item:TitleSummary;initialSaved?:boolean}) {
+export function MediaCard({item,initialSaved=false,revealOrder=0}:{item:TitleSummary;initialSaved?:boolean;revealOrder?:number}) {
   const [saved,setSaved]=useState(initialSaved),[busy,setBusy]=useState(false),[message,setMessage]=useState(""),[posterFailed,setPosterFailed]=useState(!item.poster_url),[posterLoaded,setPosterLoaded]=useState(!item.poster_url);
   const pathname=usePathname(),router=useRouter();
   useEffect(()=>{setPosterFailed(!item.poster_url);setPosterLoaded(!item.poster_url);},[item.poster_url]);
@@ -15,12 +15,12 @@ export function MediaCard({item,initialSaved=false}:{item:TitleSummary;initialSa
     e.preventDefault();e.stopPropagation();if(busy)return;setBusy(true);setMessage("");
     try {const response=await fetch(saved?"/api/watchlist?titleId="+encodeURIComponent(item.id):"/api/watchlist",{method:saved?"DELETE":"POST",headers:saved?undefined:{"Content-Type":"application/json"},body:saved?undefined:JSON.stringify({titleId:item.id})});const data=await response.json();if(response.status===401){setMessage("Sign in to save");setTimeout(()=>location.assign("/login?next="+encodeURIComponent(location.pathname)),700);}else if(!response.ok)throw new Error(data.error||"Could not update watchlist");else{setSaved(!saved);if(pathname==="/watchlist")router.refresh();}}catch(error){setMessage(error instanceof Error?error.message:"Please try again.");}finally{setBusy(false);}
   }
-  return <article className="media-card">
+  return <article className="media-card" style={{"--card-index":Math.min(8,Math.max(0,revealOrder))} as React.CSSProperties}>
     <Link href={"/title/"+item.slug} className="poster-link" aria-label={"View "+item.title}>
-      <div className={"poster-wrap"+(posterFailed?" poster-failed":"")+(item.poster_url&&!posterLoaded?" poster-loading":"")}>{item.poster_url&&!posterFailed&&<Image fill sizes="(max-width: 650px) 44vw, 172px" src={item.poster_url} alt={item.title+" poster"} loading="lazy" placeholder="blur" blurDataURL={IMAGE_BLUR_DATA_URL} onLoad={()=>{setPosterLoaded(true);setPosterFailed(false);}} onError={e=>{e.currentTarget.style.visibility="hidden";setPosterLoaded(true);setPosterFailed(true);}}/>}<div className="poster-fallback" aria-hidden="true"><span>✦</span>{item.title}</div><span className="poster-type">{item.type==="movie"?"FILM":"SERIES"}</span>{item.demo===1&&<span className="demo-pill">SAMPLE</span>}<span className="poster-play"><span>▶</span></span></div>
-      <div className="card-meta"><h3>{item.title}</h3><div className="card-submeta"><span>{item.release_year||"—"}</span><i>·</i><span>{item.status==="ongoing"?"Ongoing":item.status==="upcoming"?"Coming soon":"Complete"}</span></div><p>{item.genres?.slice(0,2).join(" · ")}</p></div>
+      <div className={"poster-wrap"+(posterFailed?" poster-failed":"")+(item.poster_url&&!posterLoaded?" poster-loading":"")}>{item.poster_url&&!posterFailed&&<Image fill sizes="(max-width: 650px) 44vw, 172px" src={item.poster_url} alt={item.title+" poster"} loading="lazy" placeholder="blur" blurDataURL={IMAGE_BLUR_DATA_URL} onLoad={()=>{setPosterLoaded(true);setPosterFailed(false);}} onError={e=>{e.currentTarget.style.visibility="hidden";setPosterLoaded(true);setPosterFailed(true);}}/>}<div className="poster-fallback" aria-hidden="true"><span>✦</span>{item.title}</div><span className="poster-type">{item.type==="movie"?"FILM":item.type==="variety"?"VARIETY":"SERIES"}</span>{item.demo===1&&<span className="demo-pill">SAMPLE</span>}{Number(item.has_sinhala_subtitles)===1&&<span className="poster-subtitle-badge" lang="si">සිංහල</span>}<span className="poster-play"><span>▶</span></span></div>
+      <div className="card-meta"><h3>{item.title}</h3><div className="card-submeta"><span>{item.release_year||"—"}</span><i>·</i><span>{item.status==="ongoing"?"Ongoing":item.status==="upcoming"?"Coming soon":"Complete"}</span>{item.status==="ongoing"&&item.episode_count? <><i>·</i><span>{item.air_day&&`${item.air_day} · `}Ep {item.episode_count}{item.total_episodes?` of ${item.total_episodes}`:""}</span></>:null}</div>{Number(item.has_new_episode)===1&&<span className="new-episode-label">NEW EPISODE</span>}<p>{item.genres?.slice(0,2).join(" · ")}</p></div>
     </Link>
-    <button className={"save-card"+(saved?" is-saved":"")} onClick={toggle} disabled={busy} aria-label={(saved?"Remove from":"Add to")+" watchlist: "+item.title} aria-pressed={saved}>{saved?"♥":"＋"}</button>{message&&<span className="card-message" role="status">{message}</span>}
+    <button className={"save-card"+(saved?" is-saved":"")} onClick={toggle} disabled={busy} aria-label={(saved?"Remove from":"Add to")+" watchlist: "+item.title} aria-pressed={saved}><span className="save-card-icon" aria-hidden="true">{saved?"✓":"＋"}</span></button>{message&&<span className="card-message" role="status">{message}</span>}
   </article>;
 }
 
@@ -40,7 +40,7 @@ export function MediaRail({title,eyebrow,items,href}:{title:string;eyebrow?:stri
           {href&&<Link href={href} className="text-link">See all <span>↗</span></Link>}
         </div>
       </div>
-      <div className="media-rail" ref={rail}>{items.map(item=><MediaCard key={item.id} item={item}/>)}</div>
+      <div className="media-rail" ref={rail}>{items.map((item,index)=><MediaCard key={item.id} item={item} revealOrder={index}/>)}</div>
     </section>
   );
 }

@@ -4,7 +4,7 @@ import {usePathname,useRouter} from "next/navigation";
 import type {TitleSummary} from "@/lib/db";
 import {ResultsGrid} from "./HomeExperience";
 
-type Filters={q?:string;genre?:string;country?:string;year?:string;type?:string;status?:string;sort?:string};
+type Filters={q?:string;genre?:string;country?:string;year?:string;type?:string;status?:string;sort?:string;hasSinhalaSubtitles?:string};
 export function SearchExperience({initialFilters={},genres=[],countries=[],years=[]}:{initialFilters?:Filters;genres?:string[];countries?:string[];years?:number[]}) {
  const [filters,setFilters]=useState<Filters>({...initialFilters}),[items,setItems]=useState<TitleSummary[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(""),[page,setPage]=useState(1),[hasMore,setHasMore]=useState(false);
  const router=useRouter(),pathname=usePathname();
@@ -12,11 +12,12 @@ export function SearchExperience({initialFilters={},genres=[],countries=[],years
  function change(key:keyof Filters,value:string){setPage(1);setFilters(f=>({...f,[key]:value||undefined}));}
  function clear(){setPage(1);setFilters({});}
  return <div className="discovery-wrap"><div className="discovery-tools">
-  <label className="search-field"><span>⌕</span><input list="title-suggestions" value={filters.q||""} onChange={e=>change("q",e.target.value)} placeholder="Search by title or alternate title" aria-label="Search by title or alternate title"/><datalist id="title-suggestions">{items.slice(0,8).map(t=><option key={t.id} value={t.title}/>)}</datalist></label>
+  <label className="search-field"><span>⌕</span><input list="title-suggestions" value={filters.q||""} onChange={e=>change("q",e.target.value)} placeholder="Search title, Sinhala title, or cast" aria-label="Search title, Sinhala title, or cast"/><datalist id="title-suggestions">{items.slice(0,8).map(t=><option key={t.id} value={t.title}/>)}</datalist></label>
   <select value={filters.genre||""} onChange={e=>change("genre",e.target.value)} aria-label="Filter by genre"><option value="">All moods & genres</option>{genres.map(g=><option key={g}>{g}</option>)}</select>
   <select value={filters.country||""} onChange={e=>change("country",e.target.value)} aria-label="Filter by country"><option value="">All countries</option>{countries.map(x=><option key={x}>{x}</option>)}</select>
   <select value={filters.year||""} onChange={e=>change("year",e.target.value)} aria-label="Filter by release year"><option value="">Any year</option>{years.map(x=><option key={x}>{x}</option>)}</select>
-  <select value={filters.type||""} onChange={e=>change("type",e.target.value)} aria-label="Filter by content type"><option value="">Movies & series</option><option value="series">Series</option><option value="movie">Movies</option></select>
+  <select value={filters.type||""} onChange={e=>change("type",e.target.value)} aria-label="Filter by content type"><option value="">All formats</option><option value="series">Series</option><option value="movie">Movies</option><option value="variety">Variety shows</option></select>
+  <select value={filters.hasSinhalaSubtitles||""} onChange={e=>change("hasSinhalaSubtitles",e.target.value)} aria-label="Filter by Sinhala subtitles"><option value="">Any subtitle language</option><option value="true">සිංහල subtitles</option></select>
   <select value={filters.status||""} onChange={e=>change("status",e.target.value)} aria-label="Filter by completion status"><option value="">Any status</option><option value="ongoing">Ongoing</option><option value="completed">Completed</option><option value="upcoming">Upcoming</option></select>
   <select value={filters.sort||"newest"} onChange={e=>change("sort",e.target.value)} aria-label="Sort titles"><option value="newest">Recently added</option><option value="popular">Popular</option><option value="alpha">A to Z</option><option value="oldest">Oldest release</option></select>
   <button className="clear-filters" onClick={clear}>Clear filters</button></div>
