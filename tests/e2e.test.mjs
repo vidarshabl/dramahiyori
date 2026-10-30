@@ -176,6 +176,10 @@ test("streaming sources, downloads, reports, preferences, watched markers, and p
  const prepared=await fetch(`${base}/api/download/${download.data.id}`,{method:"HEAD",headers:{Origin:origin}});assert.equal(prepared.status,200,"a valid episode download passes the preflight check");
  const redirected=await fetch(`${base}/api/download/${download.data.id}`,{headers:{Origin:origin},redirect:"manual"});
  assert.equal(redirected.status,302);assert.equal(redirected.headers.get("location"),"https://ia800.us.archive.org/download/test/pilot-720p.mp4");
+ const subtitleDownload=await request("/api/admin/streaming",{method:"POST",cookie:adminCookie,body:{action:"download",titleId,episodeId,quality:"subtitle",url:"https://ia800.us.archive.org/download/test/pilot-si.vtt",hostLabel:"Archive subtitles"}});
+ assert.equal(subtitleDownload.response.status,201,JSON.stringify(subtitleDownload.data));
+ const subtitleWatch=await fetch(`${base}/watch/${slug}/1-1`);assert.equal(subtitleWatch.status,200);assert.match(await subtitleWatch.text(),/Subtitle file/,"the episode page offers an admin-configured subtitle-only download");
+ const subtitleRedirect=await fetch(`${base}/api/download/${subtitleDownload.data.id}`,{headers:{Origin:origin},redirect:"manual"});assert.equal(subtitleRedirect.status,302);assert.equal(subtitleRedirect.headers.get("location"),"https://ia800.us.archive.org/download/test/pilot-si.vtt");
  const watchableTitle=await request("/api/admin/titles?id="+encodeURIComponent(titleId),{cookie:adminCookie});
  const watchEpisode=watchableTitle.data.items[0]?.episodes.find(item=>item.id===episodeId);assert.ok(watchEpisode,"the edited title retains its playable episode");
  assert.equal(Number(watchEpisode.published),1);assert.equal(Number(watchEpisode.season_number),1);assert.equal(Number(watchEpisode.episode_number),1);
