@@ -11,7 +11,7 @@ export const dynamic="force-dynamic";
 export async function generateMetadata({params}:{params:Promise<{slug:string}>}) {
   const {slug}=await params;
   const person=await getCastMember(slug);
-  return person?{title:person.name+" · Cast & crew · DearDrama",description:person.biography.slice(0,160),openGraph:{title:person.name+" · DearDrama",images:person.portrait_url?[person.portrait_url]:[]}}:{title:"Profile not found · DearDrama"};
+  return person?{title:person.name+" · Cast & crew",description:person.biography.slice(0,160),openGraph:{title:person.name+" · KVERSE",images:person.portrait_url?[person.portrait_url]:[]}}:{title:"Profile not found"};
 }
 
 export default async function CastProfilePage({params}:{params:Promise<{slug:string}>}) {

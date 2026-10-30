@@ -2,7 +2,7 @@ import Link from "next/link";
 import { RemoteImage } from "@/components/RemoteImage";
 import { listCastMembers, listCastProfessions } from "@/lib/db";
 
-export const metadata={title:"Cast & Crew | DearDrama",description:"Browse cast and crew profiles connected to DearDrama titles."};
+export const metadata={title:"Cast & Crew",description:"Browse cast and crew profiles connected to KVERSE titles."};
 
 export default async function PeoplePage({searchParams}:{searchParams:Promise<{q?:string;profession?:string}>}) {
   const params=await searchParams,query=(params.q||"").trim(),profession=(params.profession||"").trim();
