@@ -1,2 +1,4 @@
 import {InfoPage} from "@/components/InfoPage";
-export default function PolicyPage(){return <InfoPage eyebrow="RESPONSIBLE STORYTELLING" title="Content policy"><p>Publish only content and media you are authorized to make available. Add accurate metadata, label demonstrations clearly, and avoid presenting unverified ratings, subtitle languages, or availability as fact.</p><h2>Reporting a concern</h2><p>The report page explains whether the site has a reporting channel. If no contact method is shown there, the site operator has not configured a way to receive reports yet.</p></InfoPage>}
+import Link from "next/link";
+
+export default function PolicyPage(){return <InfoPage eyebrow="RESPONSIBLE STORYTELLING" title="Content policy"><p>Publish only content and media you are authorized to make available. Add accurate metadata, label demonstrations clearly, and avoid presenting unverified ratings, subtitle languages, or availability as fact.</p><h2>Reporting a concern</h2><p>Reports about a title, episode, stream, or download are sent to the site administrator for review. <Link href="/report">Submit a report</Link>.</p></InfoPage>}

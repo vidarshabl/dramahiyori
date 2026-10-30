@@ -11,6 +11,7 @@
     "db:seed": "node --experimental-strip-types scripts/seed.ts",
     "admin:create": "node --experimental-strip-types scripts/create-admin.ts",
     "test:migrations": "node --experimental-strip-types --test tests/migrations.test.mjs",
+    "test:streaming": "node --experimental-strip-types --test tests/streaming-utils.test.mjs",
     "test:e2e": "node --test tests/e2e.test.mjs"
   },
   "dependencies": {

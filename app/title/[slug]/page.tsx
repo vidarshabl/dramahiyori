@@ -6,6 +6,7 @@ import {isValidMediaUrl} from "@/lib/security";
 import {DetailActions} from "@/components/DetailActions";
 import {MediaGallery} from "@/components/MediaGallery";
 import {RemoteImage} from "@/components/RemoteImage";
+import {getSiteOrigin} from "@/lib/site-url";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
@@ -19,8 +20,9 @@ function safeBackdrop(value:string) {
 export async function generateMetadata({params}:{params:Promise<{slug:string}>}) {
   const {slug}=await params;
   const item=await getTitle(slug);
-  if(!item)return {title:"Story not found · DearDrama"};
-  return {title:item.title+" · DearDrama",description:item.synopsis,openGraph:{title:item.title,description:item.synopsis,images:item.backdrop_url?[item.backdrop_url]:[]}};
+  if(!item)return {title:"Story not found"};
+  const origin=getSiteOrigin();
+  return {title:item.title,description:item.synopsis,alternates:{canonical:new URL(`/title/${encodeURIComponent(item.slug)}`,origin).toString()},openGraph:{title:item.title+" · KVERSE",description:item.synopsis,images:item.backdrop_url?[item.backdrop_url]:[]}};
 }
 
 export default async function TitlePage({params}:{params:Promise<{slug:string}>}) {
@@ -29,22 +31,25 @@ export default async function TitlePage({params}:{params:Promise<{slug:string}>}
   if(!item)notFound();
   const related=item.genres?.[0]?(await listTitles({genre:item.genres[0],limit:"8"})).filter(title=>title.id!==item.id).slice(0,6):[];
   const episodes=item.seasons?.flatMap(season=>season.episodes)||[];
-  const validTitleStream=Boolean(item.video_url&&isValidMediaUrl(item.video_url));
-  const firstPlayableEpisode=episodes.find(episode=>Boolean((episode.video_url&&isValidMediaUrl(episode.video_url))||validTitleStream));
-  const playable=Boolean(validTitleStream||episodes.some(episode=>episode.video_url&&isValidMediaUrl(episode.video_url)));
-  const watchHref="/watch?"+new URLSearchParams({slug:item.slug,...(firstPlayableEpisode?{episode:firstPlayableEpisode.id}:{})}).toString();
+  const validTitleStream=Boolean((item.video_url&&isValidMediaUrl(item.video_url))||item.sources?.some((source:any)=>isValidMediaUrl(source.url)));
+  const firstPlayableEpisode=episodes.find(episode=>Boolean((episode.video_url&&isValidMediaUrl(episode.video_url))||episode.sources?.some((source:any)=>isValidMediaUrl(source.url))||validTitleStream));
+  const playable=Boolean(validTitleStream||episodes.some(episode=>(episode.video_url&&isValidMediaUrl(episode.video_url))||episode.sources?.some((source:any)=>isValidMediaUrl(source.url))));
+  const watchHref=item.type==="movie"?`/watch/${encodeURIComponent(item.slug)}`:firstPlayableEpisode?`/watch/${encodeURIComponent(item.slug)}/${firstPlayableEpisode.season_number}-${firstPlayableEpisode.episode_number}`:`/watch/${encodeURIComponent(item.slug)}`;
   const backdrop=safeBackdrop(item.backdrop_url);
-  const detailFacts=[item.release_year?String(item.release_year):"",item.country||"",item.status==="ongoing"?"Ongoing":item.status==="upcoming"?"Upcoming":"Completed",item.runtime_minutes?`${item.runtime_minutes} min${item.type==="series"?" / episode":""}`:"",item.type==="series"&&item.total_episodes?`${item.total_episodes} episodes`:"",item.total_runtime_minutes?`${item.total_runtime_minutes.toLocaleString()} min total`:"",item.imdb_rating!=null?`IMDb${item.imdb_rating_is_estimate?" approx.":""} ${Number(item.imdb_rating).toFixed(1)}/10`:"",item.content_rating||""].filter(Boolean);
+  const detailFacts=[item.release_year?String(item.release_year):"",item.country||"",item.status==="ongoing"?"Ongoing":item.status==="upcoming"?"Upcoming":"Completed",item.runtime_minutes?`${item.runtime_minutes} min${item.type==="series"?" / episode":""}`:"",item.type!=="movie"&&item.total_episodes?`${item.total_episodes} episodes`:"",item.total_runtime_minutes?`${item.total_runtime_minutes.toLocaleString()} min total`:"",item.imdb_rating!=null?`IMDb${item.imdb_rating_is_estimate?" approx.":""} ${Number(item.imdb_rating).toFixed(1)}/10`:"",item.content_rating||""].filter(Boolean);
+  const structuredData={"@context":"https://schema.org","@type":item.type==="movie"?"Movie":"TVSeries",name:item.title,alternateName:[item.alternative_title,item.sinhala_title].filter(Boolean),description:item.synopsis||undefined,image:[item.poster_url,item.backdrop_url].filter((value:string)=>value&&isValidMediaUrl(value)),datePublished:item.release_year?String(item.release_year):undefined,countryOfOrigin:item.country?{"@type":"Country",name:item.country}:undefined,genre:item.genres,actor:item.cast?.filter((member:any)=>member.role_type==="cast").map((member:any)=>({"@type":"Person",name:member.name,url:new URL(`/people/${encodeURIComponent(member.slug)}`,getSiteOrigin()).toString()})),numberOfEpisodes:item.total_episodes||undefined};
 
-  return <main className="detail-page">
+  return <main className="detail-page"><script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(structuredData).replace(/</g,"\\u003c")}}/>
     <section className="detail-hero" aria-hidden="true" style={{backgroundImage:backdrop?`linear-gradient(90deg,rgba(8,8,13,.94),rgba(8,8,13,.62) 52%,rgba(8,8,13,.15)),linear-gradient(0deg,#08080d,transparent 60%),url("${backdrop}")`:`radial-gradient(ellipse at 75% 20%,rgba(232,62,104,.15),transparent 34%),linear-gradient(180deg,#17111d,#08080d)`}}/>
     <div className="detail-main">
       <div className="detail-poster">{item.poster_url?<RemoteImage src={item.poster_url} sizes="(max-width: 640px) 112px, 245px" alt={item.title+" poster"} fallbackLabel={item.title}/>:<div className="detail-poster-fallback" aria-hidden="true">{item.title}</div>}{item.demo===1&&<span>KVERSE SAMPLE</span>}</div>
       <div className="detail-copy">
         <Link href="/browse" className="back-link">← Back to explore</Link>
-        <span className="eyebrow detail-eyebrow">{item.type==="movie"?"A KVERSE FILM":"A KVERSE SERIES"}{item.demo===1&&" · SAMPLE RECORD"}</span>
+        <span className="eyebrow detail-eyebrow">{item.type==="movie"?"A KVERSE FILM":item.type==="variety"?"A KVERSE VARIETY SHOW":"A KVERSE SERIES"}{item.demo===1&&" · SAMPLE RECORD"}</span>
         <h1>{item.title}</h1>
         {item.alternative_title&&<p className="detail-alt">{item.alternative_title}</p>}
+        {item.sinhala_title&&<p className="detail-sinhala-title" lang="si">{item.sinhala_title}</p>}
+        {Number(item.has_sinhala_subtitles)===1&&<span className="detail-subtitle-badge" lang="si">සිංහල උපසිරැසි සමඟ</span>}
         {!!detailFacts.length&&<div className="detail-facts">{detailFacts.map((fact,index)=><span key={`${index}-${fact}`}>{index>0&&<i aria-hidden="true">·</i>}{fact}</span>)}</div>}
         <div className="hero-genres detail-genres">{item.genres?.map(genre=><Link href={"/browse?genre="+encodeURIComponent(genre)} key={genre}>{genre}</Link>)}</div>
         {item.synopsis&&<p className="detail-synopsis">{item.synopsis}</p>}
@@ -66,14 +71,14 @@ export default async function TitlePage({params}:{params:Promise<{slug:string}>}
       <MediaGallery images={item.gallery as GalleryImage[]} label={item.title+" gallery"}/>
     </section>}
 
-    {item.type==="series"&&<section className="episode-section">
+    {item.type!=="movie"&&<section className="episode-section">
       <div className="section-heading"><div><span className="eyebrow">THE STORY SO FAR</span><h2>Episodes</h2></div><span className="episode-total">{item.total_episodes??episodes.length} {(item.total_episodes??episodes.length)===1?"episode":"episodes"}</span></div>
       {!episodes.length&&<p className="episode-guide-note">Episode listings and authorized video sources have not been added yet.</p>}
       {item.seasons?.map((season:any)=><div className="season-block" key={season.id}><h3>{season.name}</h3><div className="episode-list">{season.episodes.map((episode:any)=>{
         const source=episode.video_url||item.video_url;
-        const canPlay=Boolean(source&&isValidMediaUrl(source));
+        const canPlay=Boolean(source&&isValidMediaUrl(source)||episode.sources?.some((media:any)=>isValidMediaUrl(media.url))||item.sources?.some((media:any)=>isValidMediaUrl(media.url)));
         const details=<><span className="episode-num">{String(episode.episode_number).padStart(2,"0")}</span><span className="episode-play">{canPlay?"▶":"·"}</span><span className="episode-info"><strong>{episode.title}</strong><small>{episode.synopsis||""}</small></span><span className="episode-unavailable">{canPlay?"Watch episode":"Not streaming"}</span></>;
-        return canPlay?<Link className="episode-row" href={"/watch?slug="+item.slug+"&episode="+episode.id} key={episode.id}>{details}</Link>:<div className="episode-row episode-row-unavailable" key={episode.id}>{details}</div>;
+        return canPlay?<Link className="episode-row" href={`/watch/${encodeURIComponent(item.slug)}/${season.season_number}-${episode.episode_number}`} key={episode.id}>{details}</Link>:<div className="episode-row episode-row-unavailable" key={episode.id}>{details}</div>;
       })}</div></div>)}
     </section>}
 

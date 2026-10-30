@@ -105,7 +105,7 @@ class LocalProvider implements Provider {
   }
 }
 
-const MIGRATIONS = ["001_initial", "002_cast_gallery_media", "003_media_associations", "004_featured_order", "005_homepage_slides", "006_kverse_brand", "007_deardrama_brand", "008_title_catalog_metrics", "009_streaming_foundation"] as const;
+const MIGRATIONS = ["001_initial", "002_cast_gallery_media", "003_media_associations", "004_featured_order", "005_homepage_slides", "006_kverse_brand", "007_deardrama_brand", "008_title_catalog_metrics", "009_streaming_foundation", "010_rate_limits", "011_episode_created_at_backfill"] as const;
 
 function migrationSql(migration: typeof MIGRATIONS[number]): string {
   const file = path.join(process.cwd(), "db", "migrations", `${migration}.sql`);
@@ -264,8 +264,8 @@ async function seedDemoDataWith(provider: Provider): Promise<void> {
     }
     for (const title of demoTitles) {
       const id = randomUUID();
-      await tx.run(`INSERT INTO titles(id,type,slug,title,alternative_title,synopsis,release_year,country,status,runtime_minutes,poster_url,backdrop_url,published,featured,demo)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,1,?,1)`, [id,title.type,title.slug,title.title,title.alt,title.synopsis,title.year,title.country,title.status,(title as {runtime?:number}).runtime || null,title.poster,title.backdrop,title.featured ? 1 : 0]);
+      await tx.run(`INSERT INTO titles(id,type,catalog_type,slug,title,alternative_title,synopsis,release_year,country,status,runtime_minutes,poster_url,backdrop_url,published,featured,demo)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,1)`, [id,title.type,title.type,title.slug,title.title,title.alt,title.synopsis,title.year,title.country,title.status,(title as {runtime?:number}).runtime || null,title.poster,title.backdrop,title.featured ? 1 : 0]);
       for (const genre of title.genres) {
         const genreSlug = slugify(genre);
         await tx.run("INSERT OR IGNORE INTO genres(id,name,slug) VALUES(?,?,?)", [randomUUID(),genre,genreSlug]);
@@ -276,7 +276,7 @@ async function seedDemoDataWith(provider: Provider): Promise<void> {
         const seasonId = randomUUID();
         await tx.run("INSERT INTO seasons(id,title_id,season_number,name) VALUES(?,?,1,'Season 1')", [seasonId,id]);
         for (let episode = 1; episode <= 4; episode++) {
-          await tx.run("INSERT INTO episodes(id,season_id,episode_number,title,synopsis) VALUES(?,?,?, ?, ?)", [randomUUID(),seasonId,episode,`Episode ${episode}`,"Demonstration episode entry. No stream is configured."]);
+          await tx.run("INSERT INTO episodes(id,season_id,episode_number,title,synopsis,created_at) VALUES(?,?,?,?,?,CURRENT_TIMESTAMP)", [randomUUID(),seasonId,episode,`Episode ${episode}`,"Demonstration episode entry. No stream is configured."]);
         }
       }
     }
@@ -294,14 +294,37 @@ export type Title = {
   id:string; type:"movie"|"series"|"variety"; slug:string; title:string; alternative_title:string; sinhala_title:string; synopsis:string; release_year:number|null;
   country:string; air_day:string; has_sinhala_subtitles:number; status:"ongoing"|"completed"|"upcoming"; runtime_minutes:number|null; imdb_rating:number|null; imdb_rating_is_estimate:number; total_episodes:number|null; total_runtime_minutes:number|null; poster_url:string; backdrop_url:string;
   content_rating:string; subtitle_languages:string; video_url:string; published:number; featured:number; featured_order:number; demo:number;
-  genres?:string[]; episode_count?:number; season_count?:number; has_playable_source?:number; first_playable_episode_id?:string|null;
+  genres?:string[]; episode_count?:number; season_count?:number; has_playable_source?:number; first_playable_episode_id?:string|null; sources?:VideoSource[];
 };
 
-export type TitleSummary = Pick<Title,"id"|"type"|"slug"|"title"|"alternative_title"|"sinhala_title"|"has_sinhala_subtitles"|"synopsis"|"release_year"|"country"|"air_day"|"status"|"poster_url"|"backdrop_url"|"featured"|"demo"> & {
-  genres?:string[];has_playable_source:number;first_playable_episode_id:string|null;
+export type TitleSummary = Pick<Title,"id"|"type"|"slug"|"title"|"alternative_title"|"sinhala_title"|"has_sinhala_subtitles"|"synopsis"|"release_year"|"country"|"air_day"|"status"|"poster_url"|"backdrop_url"|"featured"|"demo"|"total_episodes"> & {
+  genres?:string[];has_playable_source:number;first_playable_episode_id:string|null;episode_count?:number;has_new_episode?:number;
 };
+
+export type EpisodeRelease = {id:string;title_id:string;slug:string;title:string;poster_url:string;episode_title:string;episode_number:number;season_number:number;duration_minutes:number|null;created_at:string;air_day:string;sinhala_title:string;has_sinhala_subtitles:number};
+export type ScheduleEntry = {id:string;slug:string;title:string;poster_url:string;air_day:string;latest_episode:number;total_episodes:number|null;sinhala_title:string;has_sinhala_subtitles:number};
+
+export async function listRecentEpisodeReleases(limit=12):Promise<EpisodeRelease[]> {
+  const count=Math.max(1,Math.min(30,Math.trunc(limit)||12));
+  const rows=await database.prepare(`SELECT e.id,t.id AS title_id,t.slug,t.title,t.poster_url,e.title AS episode_title,e.episode_number,s.season_number,e.duration_minutes,
+    COALESCE(NULLIF(e.publish_at,''),NULLIF(e.created_at,''),NULLIF(t.updated_at,''),NULLIF(t.created_at,''),CURRENT_TIMESTAMP) AS created_at,t.air_day,t.sinhala_title,t.has_sinhala_subtitles
+    FROM episodes e JOIN seasons s ON s.id=e.season_id JOIN titles t ON t.id=s.title_id
+    WHERE t.published=1 AND t.catalog_type<>'movie' AND e.published=1 AND (e.publish_at IS NULL OR datetime(e.publish_at)<=CURRENT_TIMESTAMP)
+    ORDER BY COALESCE(e.publish_at,e.created_at) DESC,e.id LIMIT ?`).all(count) as EpisodeRelease[];
+  return rows.map((row)=>({...row}));
+}
+
+export async function listWeeklySchedule():Promise<ScheduleEntry[]> {
+  return await database.prepare(`SELECT t.id,t.slug,t.title,t.poster_url,t.air_day,t.total_episodes,t.sinhala_title,t.has_sinhala_subtitles,
+    COALESCE(MAX(e.episode_number),0) AS latest_episode
+    FROM titles t LEFT JOIN seasons s ON s.title_id=t.id LEFT JOIN episodes e ON e.season_id=s.id AND e.published=1 AND (e.publish_at IS NULL OR datetime(e.publish_at)<=CURRENT_TIMESTAMP)
+    WHERE t.published=1 AND t.catalog_type='series' AND t.status='ongoing' AND t.air_day IN ('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
+    GROUP BY t.id ORDER BY CASE t.air_day WHEN 'Monday' THEN 1 WHEN 'Tuesday' THEN 2 WHEN 'Wednesday' THEN 3 WHEN 'Thursday' THEN 4 WHEN 'Friday' THEN 5 WHEN 'Saturday' THEN 6 WHEN 'Sunday' THEN 7 END,t.title COLLATE NOCASE`).all() as ScheduleEntry[];
+}
 
 export type GalleryImage = {id:string;image_url:string;caption:string;attribution:string;sort_order:number};
+export type VideoSource = {id:string;kind:"hls"|"mp4"|"embed";quality:"auto"|"480p"|"720p"|"1080p";url:string;priority:number};
+export type DownloadOption = {id:string;quality:string;size_mb:number|null;host_label:string};
 export type CastCredit = {id:string;cast_member_id:string;slug:string;name:string;portrait_url:string;character_name:string;role_type:"cast"|"director"|"writer"|"producer";sort_order:number};
 export type CastMember = {id:string;slug:string;name:string;biography:string;nationality:string;profession:string;portrait_url:string;created_at:string;updated_at:string;gallery?:GalleryImage[];credits?:Array<CastCredit & {title_id:string;title_slug:string;title:string;title_type:"movie"|"series"|"variety";release_year:number|null;poster_url:string}>};
 export type CastDirectoryItem = Pick<CastMember,"id"|"slug"|"name"|"profession"|"nationality"|"portrait_url"> & { title_count:number; known_for:string|null };
@@ -316,12 +339,13 @@ export async function listTitles(filters: Record<string,string|undefined> = {}):
   if (filters.genre) { where.push("EXISTS (SELECT 1 FROM title_genres tg JOIN genres g ON g.id=tg.genre_id WHERE tg.title_id=t.id AND (g.slug=? OR lower(g.name)=lower(?)))"); params.push(slugify(filters.genre),filters.genre); }
   if (filters.hasSinhalaSubtitles === "true") where.push("t.has_sinhala_subtitles=1");
   if (filters.q?.trim()) { where.push("(lower(t.title) LIKE ? OR lower(t.alternative_title) LIKE ? OR t.sinhala_title LIKE ? OR EXISTS (SELECT 1 FROM title_cast tc JOIN cast_members cm ON cm.id=tc.cast_member_id WHERE tc.title_id=t.id AND lower(cm.name) LIKE ?))"); const query = `%${filters.q.trim().toLowerCase()}%`; params.push(query,query,query,query); }
-  if (filters.sort === "popular") where.push("EXISTS (SELECT 1 FROM viewing_history vh WHERE vh.title_id=t.id AND vh.viewed_at>=datetime('now','-30 days'))");
-  const sort = filters.sort === "alpha" ? "t.title COLLATE NOCASE ASC" : filters.sort === "oldest" ? "t.release_year ASC,t.title" : filters.sort === "popular" ? "(SELECT COUNT(*) FROM viewing_history vh WHERE vh.title_id=t.id AND vh.viewed_at>=datetime('now','-30 days')) DESC,t.title" : filters.sort === "featured" ? "t.featured_order ASC,t.updated_at DESC,t.title" : "t.created_at DESC,t.title";
+  if (filters.sort === "popular") where.push("EXISTS (SELECT 1 FROM view_events ve WHERE ve.title_id=t.id AND ve.created_at>=datetime('now','-7 days'))");
+  const sort = filters.sort === "alpha" ? "t.title COLLATE NOCASE ASC" : filters.sort === "oldest" ? "t.release_year ASC,t.title" : filters.sort === "popular" ? "(SELECT COUNT(*) FROM view_events ve WHERE ve.title_id=t.id AND ve.created_at>=datetime('now','-7 days')) DESC,t.title" : filters.sort === "featured" ? "t.featured_order ASC,t.updated_at DESC,t.title" : "t.created_at DESC,t.title";
   const page = Math.max(1,Number(filters.page || 1)); const limit = Math.min(48,Math.max(1,Number(filters.limit || 24)));
-  const rows = await database.prepare(`SELECT t.id,t.catalog_type AS type,t.slug,t.title,t.alternative_title,t.sinhala_title,t.has_sinhala_subtitles,t.air_day,t.synopsis,t.release_year,t.country,t.status,t.poster_url,t.backdrop_url,t.featured,t.demo,
-    CASE WHEN trim(t.video_url)<>'' OR EXISTS (SELECT 1 FROM episodes pe JOIN seasons ps ON ps.id=pe.season_id WHERE ps.title_id=t.id AND trim(pe.video_url)<>'') THEN 1 ELSE 0 END AS has_playable_source,
-    (SELECT pe.id FROM episodes pe JOIN seasons ps ON ps.id=pe.season_id WHERE ps.title_id=t.id AND trim(pe.video_url)<>'' ORDER BY ps.season_number,pe.episode_number LIMIT 1) AS first_playable_episode_id
+  const rows = await database.prepare(`SELECT t.id,t.catalog_type AS type,t.slug,t.title,t.alternative_title,t.sinhala_title,t.has_sinhala_subtitles,t.air_day,t.synopsis,t.release_year,t.country,t.status,t.poster_url,t.backdrop_url,t.featured,t.demo,t.total_episodes,
+    (SELECT COUNT(*) FROM episodes ce JOIN seasons cs ON cs.id=ce.season_id WHERE cs.title_id=t.id AND ce.published=1 AND (ce.publish_at IS NULL OR datetime(ce.publish_at)<=CURRENT_TIMESTAMP)) AS episode_count,
+    CASE WHEN trim(t.video_url)<>'' OR EXISTS (SELECT 1 FROM video_sources ts WHERE ts.title_id=t.id AND ts.status='active') OR EXISTS (SELECT 1 FROM episodes pe JOIN seasons ps ON ps.id=pe.season_id WHERE ps.title_id=t.id AND pe.published=1 AND (pe.publish_at IS NULL OR datetime(pe.publish_at)<=CURRENT_TIMESTAMP) AND (trim(pe.video_url)<>'' OR EXISTS (SELECT 1 FROM video_sources es WHERE es.episode_id=pe.id AND es.status='active'))) THEN 1 ELSE 0 END AS has_playable_source,
+    (SELECT pe.id FROM episodes pe JOIN seasons ps ON ps.id=pe.season_id WHERE ps.title_id=t.id AND pe.published=1 AND (pe.publish_at IS NULL OR datetime(pe.publish_at)<=CURRENT_TIMESTAMP) AND (trim(pe.video_url)<>'' OR EXISTS (SELECT 1 FROM video_sources es WHERE es.episode_id=pe.id AND es.status='active')) ORDER BY ps.season_number,pe.episode_number LIMIT 1) AS first_playable_episode_id
     FROM titles t WHERE ${where.join(" AND ")} ORDER BY ${sort} LIMIT ? OFFSET ?`).all(...params,limit,(page-1)*limit) as TitleSummary[];
   if(!rows.length)return [];
   const genreRows=await database.prepare(`SELECT tg.title_id,g.name FROM title_genres tg JOIN genres g ON g.id=tg.genre_id WHERE tg.title_id IN (${rows.map(()=>"?").join(",")}) ORDER BY g.name COLLATE NOCASE`).all(...rows.map(row=>row.id)) as {title_id:string;name:string}[];
@@ -330,13 +354,28 @@ export async function listTitles(filters: Record<string,string|undefined> = {}):
   return rows.map(row=>({...row,genres:genreMap.get(row.id)||[]}));
 }
 
+/** Return all saved public titles for a member, including a 48-hour new-episode marker. */
+export async function listWatchlistTitles(userId:string):Promise<TitleSummary[]> {
+  const rows=await database.prepare(`SELECT t.id,t.catalog_type AS type,t.slug,t.title,t.alternative_title,t.sinhala_title,t.has_sinhala_subtitles,t.air_day,t.synopsis,t.release_year,t.country,t.status,t.poster_url,t.backdrop_url,t.featured,t.demo,t.total_episodes,
+    (SELECT COUNT(*) FROM episodes ce JOIN seasons cs ON cs.id=ce.season_id WHERE cs.title_id=t.id AND ce.published=1 AND (ce.publish_at IS NULL OR datetime(ce.publish_at)<=CURRENT_TIMESTAMP)) AS episode_count,
+    CASE WHEN trim(t.video_url)<>'' OR EXISTS (SELECT 1 FROM video_sources ts WHERE ts.title_id=t.id AND ts.status='active') OR EXISTS (SELECT 1 FROM episodes pe JOIN seasons ps ON ps.id=pe.season_id WHERE ps.title_id=t.id AND pe.published=1 AND (pe.publish_at IS NULL OR datetime(pe.publish_at)<=CURRENT_TIMESTAMP) AND (trim(pe.video_url)<>'' OR EXISTS (SELECT 1 FROM video_sources es WHERE es.episode_id=pe.id AND es.status='active'))) THEN 1 ELSE 0 END AS has_playable_source,
+    (SELECT pe.id FROM episodes pe JOIN seasons ps ON ps.id=pe.season_id WHERE ps.title_id=t.id AND pe.published=1 AND (pe.publish_at IS NULL OR datetime(pe.publish_at)<=CURRENT_TIMESTAMP) AND (trim(pe.video_url)<>'' OR EXISTS (SELECT 1 FROM video_sources es WHERE es.episode_id=pe.id AND es.status='active')) ORDER BY ps.season_number,pe.episode_number LIMIT 1) AS first_playable_episode_id,
+    CASE WHEN EXISTS (SELECT 1 FROM episodes ne JOIN seasons ns ON ns.id=ne.season_id WHERE ns.title_id=t.id AND ne.published=1 AND COALESCE(ne.publish_at,ne.created_at)>=datetime('now','-48 hours') AND (ne.publish_at IS NULL OR datetime(ne.publish_at)<=CURRENT_TIMESTAMP)) THEN 1 ELSE 0 END AS has_new_episode
+    FROM watchlist_items w JOIN titles t ON t.id=w.title_id WHERE w.user_id=? AND t.published=1 ORDER BY w.created_at DESC LIMIT 200`).all(userId) as TitleSummary[];
+  if(!rows.length)return [];
+  const genres=await database.prepare(`SELECT tg.title_id,g.name FROM title_genres tg JOIN genres g ON g.id=tg.genre_id WHERE tg.title_id IN (${rows.map(()=>"?").join(",")}) ORDER BY g.name COLLATE NOCASE`).all(...rows.map(row=>row.id)) as {title_id:string;name:string}[];
+  const genreMap=new Map<string,string[]>();
+  for(const genre of genres){const values=genreMap.get(genre.title_id)||[];values.push(genre.name);genreMap.set(genre.title_id,values);}
+  return rows.map(row=>({...row,genres:genreMap.get(row.id)||[]}));
+}
+
 export type HomepageSlide = TitleSummary & {slide_id:string};
 
 export async function listHomepageSlides(): Promise<HomepageSlide[]> {
   const rows=await database.prepare(`SELECT hs.id AS slide_id,hs.sort_order AS slide_order,hs.backdrop_url AS slide_backdrop_url,
-    t.id,t.catalog_type AS type,t.slug,t.title,t.alternative_title,t.sinhala_title,t.has_sinhala_subtitles,t.air_day,t.synopsis,t.release_year,t.country,t.status,t.poster_url,t.featured,t.demo,
-    CASE WHEN trim(t.video_url)<>'' OR EXISTS (SELECT 1 FROM episodes pe JOIN seasons ps ON ps.id=pe.season_id WHERE ps.title_id=t.id AND trim(pe.video_url)<>'') THEN 1 ELSE 0 END AS has_playable_source,
-    (SELECT pe.id FROM episodes pe JOIN seasons ps ON ps.id=pe.season_id WHERE ps.title_id=t.id AND trim(pe.video_url)<>'' ORDER BY ps.season_number,pe.episode_number LIMIT 1) AS first_playable_episode_id
+    t.id,t.catalog_type AS type,t.slug,t.title,t.alternative_title,t.sinhala_title,t.has_sinhala_subtitles,t.air_day,t.synopsis,t.release_year,t.country,t.status,t.poster_url,t.featured,t.demo,t.total_episodes,
+    CASE WHEN trim(t.video_url)<>'' OR EXISTS (SELECT 1 FROM video_sources ts WHERE ts.title_id=t.id AND ts.status='active') OR EXISTS (SELECT 1 FROM episodes pe JOIN seasons ps ON ps.id=pe.season_id WHERE ps.title_id=t.id AND pe.published=1 AND (pe.publish_at IS NULL OR datetime(pe.publish_at)<=CURRENT_TIMESTAMP) AND (trim(pe.video_url)<>'' OR EXISTS (SELECT 1 FROM video_sources es WHERE es.episode_id=pe.id AND es.status='active'))) THEN 1 ELSE 0 END AS has_playable_source,
+    (SELECT pe.id FROM episodes pe JOIN seasons ps ON ps.id=pe.season_id WHERE ps.title_id=t.id AND pe.published=1 AND (pe.publish_at IS NULL OR datetime(pe.publish_at)<=CURRENT_TIMESTAMP) AND (trim(pe.video_url)<>'' OR EXISTS (SELECT 1 FROM video_sources es WHERE es.episode_id=pe.id AND es.status='active')) ORDER BY ps.season_number,pe.episode_number LIMIT 1) AS first_playable_episode_id
     FROM homepage_slides hs JOIN titles t ON t.id=hs.title_id
     WHERE t.published=1 ORDER BY hs.sort_order,hs.created_at,hs.id LIMIT 50`).all() as Array<HomepageSlide & {slide_order:number;slide_backdrop_url:string}>;
   if(!rows.length)return [];
@@ -355,17 +394,32 @@ export async function getTitle(slug:string) {
   const rawRow = await database.prepare("SELECT * FROM titles WHERE slug=? AND published=1").get(slug) as (Title & {catalog_type?:Title["type"]})|undefined;
   if (!rawRow) return null;
   const row={...rawRow,type:rawRow.catalog_type||rawRow.type} as Title;
-  const seasons = await database.prepare("SELECT id,season_number,name FROM seasons WHERE title_id=? ORDER BY season_number").all(row.id) as {id:string;season_number:number;name:string}[];
+  const seasons = (await database.prepare(`SELECT s.id,s.season_number,s.name FROM seasons s WHERE s.title_id=? AND EXISTS
+    (SELECT 1 FROM episodes e WHERE e.season_id=s.id AND e.published=1 AND (e.publish_at IS NULL OR datetime(e.publish_at)<=CURRENT_TIMESTAMP)) ORDER BY s.season_number`).all(row.id) as {id:string;season_number:number;name:string}[]).map((season)=>({...season}));
+  const [titleSources,titleDownloads,titleSubtitles] = await Promise.all([
+    database.prepare("SELECT id,kind,quality,url,priority FROM video_sources WHERE title_id=? AND status='active' ORDER BY priority DESC,quality DESC,id").all(row.id) as Promise<VideoSource[]>,
+    database.prepare("SELECT id,quality,size_mb,host_label FROM download_links WHERE title_id=? AND status='active' ORDER BY quality DESC,created_at").all(row.id) as Promise<DownloadOption[]>,
+    database.prepare("SELECT language,label,vtt_url AS file_url,kind,is_default,timing_offset FROM content_subtitle_tracks WHERE title_id=? ORDER BY is_default DESC,language").all(row.id) as Promise<Record<string,unknown>[]>,
+  ]);
   const fullSeasons:any[] = await Promise.all(seasons.map(async (season) => {
-    const episodes = await database.prepare("SELECT id,episode_number,title,synopsis,thumbnail_url,duration_minutes,video_url,air_date,publish_at,published,created_at FROM episodes WHERE season_id=? ORDER BY episode_number").all(season.id) as {id:string;episode_number:number;title:string;synopsis:string;thumbnail_url:string;duration_minutes:number|null;video_url:string;air_date:string|null;publish_at:string|null;published:number;created_at:string}[];
-    return {...season,episodes:await Promise.all(episodes.map(async (episode) => ({...episode,subtitles:(await database.prepare("SELECT language,label,vtt_url AS file_url,kind,is_default,timing_offset FROM content_subtitle_tracks WHERE episode_id=? ORDER BY is_default DESC,language").all(episode.id)).map(track=>({...track}))})))};
+    const episodes = await database.prepare(`SELECT id,episode_number,title,synopsis,thumbnail_url,duration_minutes,video_url,air_date,publish_at,published,created_at FROM episodes WHERE season_id=? AND published=1 AND (publish_at IS NULL OR datetime(publish_at)<=CURRENT_TIMESTAMP) ORDER BY episode_number`).all(season.id) as {id:string;episode_number:number;title:string;synopsis:string;thumbnail_url:string;duration_minutes:number|null;video_url:string;air_date:string|null;publish_at:string|null;published:number;created_at:string}[];
+    return {...season,episodes:await Promise.all(episodes.map(async (episode) => {
+      const [subtitles,sources,downloads] = await Promise.all([
+        database.prepare("SELECT language,label,vtt_url AS file_url,kind,is_default,timing_offset FROM content_subtitle_tracks WHERE episode_id=? ORDER BY is_default DESC,language").all(episode.id),
+        database.prepare("SELECT id,kind,quality,url,priority FROM video_sources WHERE episode_id=? AND status='active' ORDER BY priority DESC,quality DESC,id").all(episode.id) as Promise<VideoSource[]>,
+        database.prepare("SELECT id,quality,size_mb,host_label FROM download_links WHERE episode_id=? AND status='active' ORDER BY quality DESC,created_at").all(episode.id) as Promise<DownloadOption[]>,
+      ]);
+      // Keep the season number on each flattened episode as well as on the season.
+      // The watch route, episode navigation, and JSON-LD all consume flat episodes.
+      return {...episode,season_number:season.season_number,subtitles:(subtitles as Record<string,unknown>[]).map((track)=>({...track})),sources:sources.map((source)=>({...source})),downloads:(downloads as Record<string,unknown>[]).map((download)=>({...download}))};
+    }))};
   }));
   const [genres,galleryRows,castRows] = await Promise.all([
     getGenres(row.id),
     database.prepare("SELECT id,image_url,caption,attribution,sort_order FROM title_gallery WHERE title_id=? ORDER BY sort_order,id").all(row.id) as Promise<GalleryImage[]>,
     database.prepare("SELECT tc.id,tc.cast_member_id,cm.slug,cm.name,cm.portrait_url,tc.character_name,tc.role_type,tc.sort_order FROM title_cast tc JOIN cast_members cm ON cm.id=tc.cast_member_id WHERE tc.title_id=? ORDER BY tc.sort_order,cm.name COLLATE NOCASE").all(row.id) as Promise<CastCredit[]>,
   ]);
-  return {...row,genres,seasons:fullSeasons,gallery:galleryRows.map(image=>({...image})),cast:castRows.map(member=>({...member} as CastCredit))};
+  return {...row,sources:titleSources.map((source)=>({...source})),downloads:titleDownloads.map((download)=>({...download})),subtitles:titleSubtitles.map(track=>({...track})),genres,seasons:fullSeasons,gallery:galleryRows.map(image=>({...image})),cast:castRows.map(member=>({...member} as CastCredit))};
 }
 
 export async function getCastMember(slug:string):Promise<CastMember|null> {

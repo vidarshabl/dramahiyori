@@ -1,3 +1,3 @@
 import type {MetadataRoute} from "next";
 import {getSiteOrigin} from "@/lib/site-url";
-export default function robots():MetadataRoute.Robots{return {rules:{userAgent:"*",allow:"/",disallow:["/admin","/api","/account","/login","/register","/forgot-password","/watchlist","/watch"]},sitemap:new URL("/sitemap.xml",getSiteOrigin()).toString()};}
+export default function robots():MetadataRoute.Robots{return {rules:{userAgent:"*",allow:"/",disallow:["/admin","/api","/account","/login","/register","/forgot-password","/watchlist"]},sitemap:new URL("/sitemap.xml",getSiteOrigin()).toString()};}

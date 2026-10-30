@@ -23,13 +23,14 @@ test("an existing 001 database upgrades in place and serves cast, galleries, and
 
   const childScript=`
     import assert from "node:assert/strict";
-    const {database,listTitles,listHomepageSlides,getTitle,getCastMember,listCastMembers,listCastProfessions}=await import("./lib/db.ts");
+    const {database,listTitles,listRecentEpisodeReleases,listWatchlistTitles,listHomepageSlides,getTitle,getCastMember,listCastMembers,listCastProfessions}=await import("./lib/db.ts");
     const {recordMediaUsage,recordTitleImageUsages,recordCastImageUsages}=await import("./lib/media-usage.ts");
     const {persistHomeSlides}=await import("./lib/home-slides.ts");
     const {isBlobStorageConfigured}=await import("./lib/blob-storage.ts");
     const {persistTitleEpisodes}=await import("./lib/title-episodes.ts");
+    const {consumeRateLimit}=await import("./lib/rate-limit.ts");
     const applied=await database.prepare("SELECT id FROM schema_migrations ORDER BY id").all();
-    assert.deepEqual(applied.map(row=>row.id),["001_initial","002_cast_gallery_media","003_media_associations","004_featured_order","005_homepage_slides","006_kverse_brand","007_deardrama_brand","008_title_catalog_metrics","009_streaming_foundation"]);
+    assert.deepEqual(applied.map(row=>row.id),["001_initial","002_cast_gallery_media","003_media_associations","004_featured_order","005_homepage_slides","006_kverse_brand","007_deardrama_brand","008_title_catalog_metrics","009_streaming_foundation","010_rate_limits","011_episode_created_at_backfill"]);
     await database.prepare("UPDATE titles SET imdb_rating=?,imdb_rating_is_estimate=?,total_episodes=?,total_runtime_minutes=? WHERE id=?").run(8.2,0,16,1120,"migration-title");
     const titleMetrics=await database.prepare("SELECT imdb_rating,imdb_rating_is_estimate,total_episodes,total_runtime_minutes FROM titles WHERE id=?").get("migration-title");
     assert.deepEqual([titleMetrics.imdb_rating,titleMetrics.imdb_rating_is_estimate,titleMetrics.total_episodes,titleMetrics.total_runtime_minutes],[8.2,0,16,1120]);
@@ -42,8 +43,12 @@ test("an existing 001 database upgrades in place and serves cast, galleries, and
     process.env.VERCEL_OIDC_TOKEN="development-oidc-token";
     assert.equal(isBlobStorageConfigured(new Request("https://example.test")),true);
     delete process.env.BLOB_STORE_ID;delete process.env.VERCEL_OIDC_TOKEN;
-    const tables=await database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('cast_members','title_cast','title_gallery','cast_gallery','media_assets','media_asset_usages','homepage_slides','content_subtitle_tracks','video_sources','download_links','download_clicks','view_events','watched_episodes','user_playback_preferences','title_requests','link_reports') ORDER BY name").all();
-    assert.equal(tables.length,16);
+    const limiterRequest=new Request("https://example.test/api/report",{headers:{"x-forwarded-for":"203.0.113.25","origin":"https://example.test","host":"example.test"}});
+    assert.equal(await consumeRateLimit(database,limiterRequest,"migration-test",2,60_000),true);
+    assert.equal(await consumeRateLimit(database,limiterRequest,"migration-test",2,60_000),true);
+    assert.equal(await consumeRateLimit(database,limiterRequest,"migration-test",2,60_000),false);
+    const tables=await database.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('cast_members','title_cast','title_gallery','cast_gallery','media_assets','media_asset_usages','homepage_slides','content_subtitle_tracks','video_sources','download_links','download_clicks','view_events','watched_episodes','user_playback_preferences','title_requests','link_reports','api_rate_limits') ORDER BY name").all();
+    assert.equal(tables.length,17);
     assert.equal((await database.prepare("SELECT catalog_type FROM titles WHERE id=?").get("migration-title")).catalog_type,"series");
     assert.deepEqual((await listHomepageSlides()).map(slide=>[slide.slide_id,slide.id,slide.backdrop_url]),[["legacy-migration-title","migration-title","https://media.example.test/title-backdrop.jpg"]]);
     await database.prepare("UPDATE titles SET featured_order=? WHERE id=?").run(5,"migration-title");
@@ -57,6 +62,10 @@ test("an existing 001 database upgrades in place and serves cast, galleries, and
     await database.prepare("INSERT INTO episodes(id,season_id,episode_number,title,video_url) VALUES(?,?,?,?,?)").run("audit-episode-1","audit-season-1",1,"Unstreamed opener","");
     await database.prepare("INSERT INTO episodes(id,season_id,episode_number,title,video_url) VALUES(?,?,?,?,?)").run("audit-episode-2","audit-season-2",1,"First available episode","https://media.example.test/episode.mp4");
     await database.prepare("INSERT INTO episodes(id,season_id,episode_number,title,video_url) VALUES(?,?,?,?,?)").run("audit-episode-3","audit-season-1",2,"Second opener","");
+    const {readFileSync}=await import("node:fs");const path=await import("node:path");
+    await database.exec(readFileSync(path.join(process.cwd(),"db","migrations","011_episode_created_at_backfill.sql"),"utf8"));
+    assert.ok((await database.prepare("SELECT created_at FROM episodes WHERE id=?").get("audit-episode-1")).created_at,"legacy episode timestamps are backfilled");
+    await database.prepare("UPDATE episodes SET created_at='2020-01-01 00:00:00' WHERE id IN (?,?)").run("audit-episode-1","audit-episode-3");
     await database.prepare("INSERT INTO subtitle_tracks(id,episode_id,language,label,file_url,kind) VALUES(?,?,?,?,?,?)").run("audit-subtitle","audit-episode-2","en","English","https://media.example.test/episode.vtt","subtitles");
     await database.prepare("INSERT INTO users(id,email,display_name,password_hash) VALUES(?,?,?,?)").run("audit-user","audit-user@example.test","Audit User","unused");
     await database.prepare("INSERT INTO watch_progress(user_id,title_id,episode_id,position_seconds,duration_seconds) VALUES(?,?,?,?,?)").run("audit-user","migration-title","audit-episode-1",87,1200);
@@ -114,10 +123,24 @@ test("an existing 001 database upgrades in place and serves cast, galleries, and
     assert.equal((await database.prepare("SELECT language,is_default,timing_offset FROM content_subtitle_tracks WHERE episode_id=?").get("audit-episode-2")).language,"si");
     assert.equal((await database.prepare("SELECT vtt_url FROM content_subtitle_tracks WHERE episode_id=?").get("audit-episode-2")).vtt_url,"https://media.example.test/episode.vtt");
     assert.equal((await database.prepare("SELECT url FROM video_sources WHERE id=?").get("legacy-episode-audit-episode-2")).url,"https://media.example.test/episode.mp4");
+    const latestReleases=await listRecentEpisodeReleases(5);
+    assert.equal(latestReleases[0].id,"audit-episode-2");
+    assert.equal(Object.getPrototypeOf(latestReleases[0]),Object.prototype,"release rows are plain objects safe to pass into client components");
     const listed=await listTitles({q:"Migration Compatibility Audit",genre:"Audit Genre"});
     assert.equal(listed.length,1);
     assert.equal(listed[0].has_playable_source,1);
     assert.equal(listed[0].first_playable_episode_id,"audit-episode-2");
+    await database.prepare("INSERT INTO watchlist_items(user_id,title_id) VALUES(?,?)").run("audit-user","migration-title");
+    await database.prepare("UPDATE episodes SET created_at='2020-01-01 00:00:00',publish_at=NULL WHERE season_id IN (SELECT id FROM seasons WHERE title_id=?)").run("migration-title");
+    await database.prepare("UPDATE episodes SET created_at=CURRENT_TIMESTAMP WHERE id=?").run("audit-episode-2");
+    const watchlist=await listWatchlistTitles("audit-user");
+    assert.equal(watchlist.length,1);
+    assert.equal(watchlist[0].has_new_episode,1);
+    assert.equal(watchlist[0].first_playable_episode_id,"audit-episode-2");
+    await database.prepare("UPDATE episodes SET created_at='2020-01-01 00:00:00',publish_at=NULL WHERE id=?").run("audit-episode-2");
+    assert.equal((await listWatchlistTitles("audit-user"))[0].has_new_episode,0);
+    await database.prepare("INSERT INTO view_events(id,title_id,episode_id,visitor_key) VALUES(?,?,?,?)").run("audit-view-1","migration-title","audit-episode-2","guest-1");
+    assert.equal((await listTitles({sort:"popular"}))[0].id,"migration-title");
     const title=await getTitle("migration-compatibility-audit");
     assert.equal(title.title,"Migration Compatibility Audit");
     assert.equal(title.gallery.length,1);

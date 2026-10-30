@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { PublicChrome } from "@/components/SiteChrome";
+import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import { getSiteUrl } from "@/lib/site-url";
-import { dmSans, parisienne, playfairDisplay } from "./fonts";
+import { dmSans, notoSansSinhala, parisienne, playfairDisplay } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -18,6 +19,7 @@ export const metadata: Metadata = {
     title: "DearDrama · Stories that stay",
     description: "A cozy corner for stories that stay.",
   },
+  manifest: "/manifest.webmanifest",
   robots: { index: true, follow: true },
 };
 
@@ -33,8 +35,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${dmSans.variable} ${playfairDisplay.variable} ${parisienne.variable}`}>
+    <html lang="en" className={`${dmSans.variable} ${playfairDisplay.variable} ${parisienne.variable} ${notoSansSinhala.variable}`}>
       <body>
+        <ServiceWorkerRegistration />
         <PublicChrome>{children}</PublicChrome>
       </body>
     </html>
