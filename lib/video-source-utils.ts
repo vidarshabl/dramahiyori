@@ -39,8 +39,16 @@ export function normalizeVideoSourceInput(value: unknown, preferredKind?: VideoS
   const iframeSource = extractIframeSource(input);
   const candidate = iframeSource || input;
   let url: URL;
-  try { url = new URL(candidate); } catch { return null; }
+  try { url = new URL(candidate.startsWith("//") ? `https:${candidate}` : candidate); } catch { return null; }
   if (!url.hostname || url.username || url.password || !["http:", "https:"].includes(url.protocol)) return null;
+
+  // Internet Archive item pages are not player pages. Convert the normal
+  // /details/{identifier} link to the official /embed/{identifier} player URL.
+  const archiveHost = url.hostname.toLowerCase().replace(/\.$/, "");
+  if ((archiveHost === "archive.org" || archiveHost.endsWith(".archive.org")) && !iframeSource) {
+    const archiveItem = /^\/details\/([^/]+)\/?$/i.exec(url.pathname);
+    if (archiveItem) url.pathname = `/embed/${archiveItem[1]}`;
+  }
 
   const path = url.pathname.toLowerCase();
   const directHls = /\.m3u8$/.test(path);

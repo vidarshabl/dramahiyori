@@ -1,7 +1,31 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { convertSrtToVtt, validateVtt } from "../lib/subtitle-utils.ts";
+import { normalizeVideoSourceInput } from "../lib/video-source-utils.ts";
 import { getNextPlayableEpisode, getNextSourceIndex, isEpisodeNew, parseGuestProgress } from "../lib/watch-utils.ts";
+
+test("Internet Archive item, embed, protocol-relative iframe, and direct MP4 URLs normalize for playback", () => {
+  assert.deepEqual(normalizeVideoSourceInput("https://archive.org/details/sample-video"), {
+    kind: "embed",
+    url: "https://archive.org/embed/sample-video",
+  });
+  assert.deepEqual(normalizeVideoSourceInput("https://archive.org/details/sample-video?start=60"), {
+    kind: "embed",
+    url: "https://archive.org/embed/sample-video?start=60",
+  });
+  assert.deepEqual(normalizeVideoSourceInput("https://archive.org/embed/sample-video"), {
+    kind: "embed",
+    url: "https://archive.org/embed/sample-video",
+  });
+  assert.deepEqual(normalizeVideoSourceInput('<iframe src="//archive.org/embed/sample-video"></iframe>'), {
+    kind: "embed",
+    url: "https://archive.org/embed/sample-video",
+  });
+  assert.deepEqual(normalizeVideoSourceInput("https://archive.org/download/sample-video/movie.mp4"), {
+    kind: "mp4",
+    url: "https://archive.org/download/sample-video/movie.mp4",
+  });
+});
 
 test("SRT converts comma timestamps to valid WebVTT and keeps Sinhala UTF-8 text", () => {
   const srt = "1\r\n00:00:01,250 --> 00:00:03,500\r\nආයුබෝවන්\r\n";
