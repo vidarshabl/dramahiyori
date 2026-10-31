@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { isValidMediaUrl } from "./security.ts";
 import { recordMediaUsage } from "./media-usage.ts";
+import { normalizeVideoSourceInput } from "./video-source-utils.ts";
 import type { DatabaseAdapter } from "./db.ts";
 
 type ExistingEpisode = { id: string; episode_number: number; season_number: number };
@@ -26,6 +27,9 @@ export async function persistTitleEpisodes(db: DatabaseAdapter, titleId: string,
     const rawPublishAt = typeof episode.publishAt === "string" ? episode.publishAt.trim() : "";
     const publishAt = rawPublishAt ? new Date(rawPublishAt).toISOString() : null;
     const tracks = Array.isArray(episode.subtitles) ? episode.subtitles as Record<string, unknown>[] : [];
+    const rawVideoUrl=typeof episode.videoUrl === "string" ? episode.videoUrl.trim() : "";
+    const requestedVideoKind=episode.videoKind==="hls"||episode.videoKind==="embed"||episode.videoKind==="mp4"?episode.videoKind:undefined;
+    const videoSource=rawVideoUrl?normalizeVideoSourceInput(rawVideoUrl,requestedVideoKind):null;
     return {
       id,
       matched: Boolean(matched),
@@ -35,7 +39,8 @@ export async function persistTitleEpisodes(db: DatabaseAdapter, titleId: string,
       synopsis: typeof episode.synopsis === "string" ? episode.synopsis.slice(0, 1000) : "",
       thumbnailUrl,
       durationMinutes: Number.isSafeInteger(rawRuntime) && rawRuntime > 0 ? rawRuntime : null,
-      videoUrl: typeof episode.videoUrl === "string" ? episode.videoUrl.trim() : "",
+      videoUrl: videoSource?.url || "",
+      videoKind: videoSource?.kind || "mp4",
       videoQuality: ["480p","720p","1080p"].includes(String(episode.videoQuality)) ? String(episode.videoQuality) : "auto",
       airDate: typeof episode.airDate === "string" && episode.airDate ? episode.airDate : null,
       publishAt,
@@ -83,8 +88,8 @@ export async function persistTitleEpisodes(db: DatabaseAdapter, titleId: string,
     const legacySourceId = `legacy-episode-${episode.id}`;
     if (episode.videoUrl) {
       await db.prepare(`INSERT INTO video_sources(id,episode_id,kind,quality,url,priority,status)
-        VALUES(?,?,'mp4',?,?,-1000,'active') ON CONFLICT(id) DO UPDATE SET quality=excluded.quality,url=excluded.url,status='active',updated_at=CURRENT_TIMESTAMP`)
-        .run(legacySourceId, episode.id, episode.videoQuality, episode.videoUrl);
+        VALUES(?,?,?, ?,?,-1000,'active') ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,quality=excluded.quality,url=excluded.url,status='active',updated_at=CURRENT_TIMESTAMP`)
+        .run(legacySourceId, episode.id, episode.videoKind, episode.videoQuality, episode.videoUrl);
     } else {
       await db.prepare("DELETE FROM video_sources WHERE id=?").run(legacySourceId);
     }

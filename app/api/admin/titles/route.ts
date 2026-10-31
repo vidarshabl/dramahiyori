@@ -5,6 +5,7 @@ import { isAllowedMediaUrl, isValidMediaUrl } from "@/lib/security";
 import { recordTitleImageUsages } from "@/lib/media-usage";
 import { invalidatePublicCatalogCache } from "@/lib/catalog";
 import { persistTitleEpisodes } from "@/lib/title-episodes";
+import { normalizeVideoSourceInput } from "@/lib/video-source-utils";
 import { randomUUID } from "node:crypto";
 
 export const runtime="nodejs";
@@ -18,11 +19,13 @@ function validTitle(body:Record<string,unknown>) {
   const releaseYear=body.releaseYear===""||body.releaseYear==null?null:Number(body.releaseYear);
   const poster=typeof body.posterUrl==="string"?body.posterUrl.trim():"";
   const backdrop=typeof body.backdropUrl==="string"?body.backdropUrl.trim():"";
-  const video=typeof body.videoUrl==="string"?body.videoUrl.trim():"";
+  const rawVideo=typeof body.videoUrl==="string"?body.videoUrl.trim():"";
+  const normalizedVideo=rawVideo?normalizeVideoSourceInput(rawVideo):null;
+  const video=normalizedVideo?.url||"";
   const genres=Array.isArray(body.genres)?body.genres.filter((x):x is string=>typeof x==="string").map(x=>x.trim()).filter(Boolean).slice(0,20):[];
   if(title.length<1||title.length>160||!type||synopsis.length>5000)return {error:"Add a title, a content type, and a synopsis under 5,000 characters."};
   if(releaseYear!==null&&(!Number.isInteger(releaseYear)||releaseYear<1900||releaseYear>2100))return {error:"Enter a valid release year."};
-  if(!isValidMediaUrl(poster)||!isValidMediaUrl(backdrop)||!isValidMediaUrl(video))return {error:"Use valid HTTP or HTTPS media URLs. Video sources must use HTTPS in production."};
+  if(!isValidMediaUrl(poster)||!isValidMediaUrl(backdrop)||(rawVideo&&(!normalizedVideo||!isValidMediaUrl(video))))return {error:"Use valid HTTP or HTTPS media URLs. Video sources must use HTTPS in production."};
   const status=["ongoing","completed","upcoming"].includes(String(body.status))?String(body.status):"completed";
   const country=typeof body.country==="string"?body.country.trim().slice(0,100):"";
   const airDay=typeof body.airDay==="string"?body.airDay.trim():"";
@@ -82,11 +85,15 @@ function validTitle(body:Record<string,unknown>) {
     const episodeIds=new Set<string>();
     const episodePositions=new Set<string>();
     for(let i=0;i<episodes.length;i++) {
-      const ep=episodes[i]; const name=typeof ep?.title==="string"?ep.title.trim():""; const url=typeof ep?.videoUrl==="string"?ep.videoUrl.trim():"";
+      const ep=episodes[i]; const name=typeof ep?.title==="string"?ep.title.trim():""; const rawUrl=typeof ep?.videoUrl==="string"?ep.videoUrl.trim():"";
+      const requestedVideoKind=ep?.videoKind==="hls"||ep?.videoKind==="embed"||ep?.videoKind==="mp4"?ep.videoKind:undefined;
+      const videoSource=rawUrl?normalizeVideoSourceInput(rawUrl,requestedVideoKind):null;
+      const url=videoSource?.url||"";
       if(ep?.id!==undefined&&(typeof ep.id!=="string"||!/^[a-f\d]{8}-[a-f\d]{4}-4[a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i.test(ep.id)||episodeIds.has(ep.id)))return {error:`Episode ${i+1} has an invalid record ID.`};
       if(typeof ep?.id==="string")episodeIds.add(ep.id);
       const tracks=Array.isArray(ep?.subtitles)?ep.subtitles as Record<string,unknown>[]:[];
-      if(!name||name.length>160||!isValidMediaUrl(url)||tracks.length>20||tracks.some(track=>typeof track.language!=="string"||track.language.trim().length<2||track.language.trim().length>20||typeof track.label!=="string"||track.label.trim().length>80||typeof track.fileUrl!=="string"||!isAllowedMediaUrl(track.fileUrl)||(track.kind!==undefined&&!['subtitles','captions'].includes(String(track.kind)))||(track.isDefault!==undefined&&typeof track.isDefault!=="boolean")||(track.timingOffset!==undefined&&(!Number.isFinite(Number(track.timingOffset))||Number(track.timingOffset)<-60||Number(track.timingOffset)>60))))return {error:`Check the title, video URL, and subtitle URLs for episode ${i+1}.`};
+      if(!name||name.length>160||(rawUrl&&(!videoSource||!isValidMediaUrl(url)))||tracks.length>20||tracks.some(track=>typeof track.language!=="string"||track.language.trim().length<2||track.language.trim().length>20||typeof track.label!=="string"||track.label.trim().length>80||typeof track.fileUrl!=="string"||!isAllowedMediaUrl(track.fileUrl)||(track.kind!==undefined&&!['subtitles','captions'].includes(String(track.kind)))||(track.isDefault!==undefined&&typeof track.isDefault!=="boolean")||(track.timingOffset!==undefined&&(!Number.isFinite(Number(track.timingOffset))||Number(track.timingOffset)<-60||Number(track.timingOffset)>60))))return {error:`Check the title, video URL, and subtitle URLs for episode ${i+1}.`};
+      episodes[i]={...ep,videoUrl:url};
       const airDate=typeof ep?.airDate==="string"?ep.airDate:"";
       const publishAt=typeof ep?.publishAt==="string"?ep.publishAt:"";
       if(airDate&&!/^\d{4}-\d{2}-\d{2}$/.test(airDate))return {error:`Episode ${i+1} has an invalid air date.`};
@@ -124,8 +131,10 @@ async function syncHomepageSlide(db:DatabaseAdapter,titleId:string,featured:bool
 async function syncLegacyTitleSource(db:DatabaseAdapter,titleId:string,url:string) {
   const id=`legacy-title-${titleId}`;
   if(!url){await db.prepare("DELETE FROM video_sources WHERE id=?").run(id);return;}
+  const source=normalizeVideoSourceInput(url);
+  if(!source){await db.prepare("DELETE FROM video_sources WHERE id=?").run(id);return;}
   await db.prepare(`INSERT INTO video_sources(id,title_id,kind,quality,url,priority,status)
-    VALUES(?,?,'mp4','auto',?,-1000,'active') ON CONFLICT(id) DO UPDATE SET url=excluded.url,status='active',updated_at=CURRENT_TIMESTAMP`).run(id,titleId,url);
+    VALUES(?,?,?,'auto',?,-1000,'active') ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,url=excluded.url,status='active',updated_at=CURRENT_TIMESTAMP`).run(id,titleId,source.kind,source.url);
 }
 async function writeTitleSubtitles(db:DatabaseAdapter,titleId:string,tracks:SubtitleInput[]|null) {
   if(tracks===null)return;
@@ -146,7 +155,7 @@ export async function GET(request:Request) {
     t.type=t.catalog_type||t.type;
     const [genres,episodes,gallery,titleSubtitles]=await Promise.all([
       database.prepare("SELECT g.name FROM genres g JOIN title_genres tg ON tg.genre_id=g.id WHERE tg.title_id=?").all(t.id) as Promise<{name:string}[]>,
-      database.prepare("SELECT e.id,e.title,e.episode_number,e.synopsis,e.thumbnail_url,e.duration_minutes,e.video_url,e.air_date,e.publish_at,e.published,e.created_at,s.season_number,COALESCE((SELECT quality FROM video_sources WHERE id='legacy-episode-'||e.id),'auto') AS video_quality FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE s.title_id=? ORDER BY s.season_number,e.episode_number").all(t.id) as Promise<{id:string;[key:string]:any}[]>,
+      database.prepare("SELECT e.id,e.title,e.episode_number,e.synopsis,e.thumbnail_url,e.duration_minutes,e.video_url,e.air_date,e.publish_at,e.published,e.created_at,s.season_number,COALESCE((SELECT quality FROM video_sources WHERE id='legacy-episode-'||e.id),'auto') AS video_quality,COALESCE((SELECT kind FROM video_sources WHERE id='legacy-episode-'||e.id),'mp4') AS video_kind FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE s.title_id=? ORDER BY s.season_number,e.episode_number").all(t.id) as Promise<{id:string;[key:string]:any}[]>,
       database.prepare("SELECT id,image_url,caption,attribution,sort_order FROM title_gallery WHERE title_id=? ORDER BY sort_order,id").all(t.id) as Promise<Record<string,any>[]>,
       database.prepare("SELECT language,label,vtt_url AS fileUrl,kind,is_default AS isDefault,timing_offset AS timingOffset FROM content_subtitle_tracks WHERE title_id=? ORDER BY is_default DESC,language").all(t.id) as Promise<Record<string,any>[]>
     ]);

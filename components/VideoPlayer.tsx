@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getNextSourceIndex, parseGuestProgress } from "@/lib/watch-utils";
+import { normalizeVideoSourceInput } from "@/lib/video-source-utils";
 
 type SubtitleTrack = { language: string; label: string; file_url: string; kind: string; is_default?: number; timing_offset?: number };
 type MediaSource = { id?: string; kind: "hls" | "mp4" | "embed"; quality: "auto" | "480p" | "720p" | "1080p"; url: string; priority?: number };
@@ -46,8 +47,11 @@ export function VideoPlayer({ src, sources = [], titleId, titleSlug, title, post
   const [reducedMotion, setReducedMotion] = useState(false);
 
   const availableSources = useMemo(() => {
-    const all = sources.length ? [...sources] : src ? [{ kind: src.toLowerCase().includes(".m3u8") ? "hls" as const : "mp4" as const, quality: "auto" as const, url: src }] : [];
-    return all.filter((source) => source.url).sort((a, b) => (Number(b.priority) || 0) - (Number(a.priority) || 0) || (qualityRank[b.quality] || 0) - (qualityRank[a.quality] || 0));
+    const all = sources.length ? [...sources] : src ? [{ kind: "mp4" as const, quality: "auto" as const, url: src }] : [];
+    return all.flatMap((source) => {
+      const normalized = normalizeVideoSourceInput(source.url, source.kind);
+      return normalized ? [{ ...source, ...normalized }] : [];
+    }).sort((a, b) => (Number(b.priority) || 0) - (Number(a.priority) || 0) || (qualityRank[b.quality] || 0) - (qualityRank[a.quality] || 0));
   }, [sources, src]);
   const qualitySources = useMemo(() => {
     if (quality === "auto") return [...availableSources].sort((a, b) => (qualityRank[b.quality] || 0) - (qualityRank[a.quality] || 0) || (Number(b.priority) || 0) - (Number(a.priority) || 0));
@@ -57,6 +61,7 @@ export function VideoPlayer({ src, sources = [], titleId, titleSlug, title, post
   const safeIndex = qualitySources.length ? Math.min(sourceIndex, qualitySources.length - 1) : 0;
   const activeSource = qualitySources[safeIndex];
   const currentSrc = activeSource?.url || "";
+  const isEmbed = activeSource?.kind === "embed";
 
   useEffect(() => {
     const setting = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -108,7 +113,7 @@ export function VideoPlayer({ src, sources = [], titleId, titleSlug, title, post
   }, []);
 
   useEffect(() => {
-    if (!currentSrc || activeSource?.kind === "embed") return;
+    if (!currentSrc || isEmbed) return;
     const element = video.current;
     if (!element) return;
     let cancelled = false, hls: { destroy: () => void } | null = null;
@@ -132,7 +137,7 @@ export function VideoPlayer({ src, sources = [], titleId, titleSlug, title, post
     };
     void load();
     return () => { cancelled = true; hls?.destroy(); element.removeAttribute("src"); element.load(); };
-  }, [activeSource?.kind, currentSrc]);
+  }, [isEmbed, currentSrc]);
 
   useEffect(() => {
     if (!error || qualitySources.length <= 1) return;
@@ -149,7 +154,7 @@ export function VideoPlayer({ src, sources = [], titleId, titleSlug, title, post
   }, [error, qualitySources.length, sourceIndex]);
 
   useEffect(() => {
-    if (!currentSrc) return;
+    if (!currentSrc || isEmbed) return;
     pendingResume.current = null; setResumeNote("");
     let cancelled = false;
     const localKey = `kverse:progress:${titleId}:${episodeId || "movie"}`;
@@ -161,7 +166,7 @@ export function VideoPlayer({ src, sources = [], titleId, titleSlug, title, post
       if (video.current && video.current.readyState >= 1) applyResume();
     }).catch(() => {});
     return () => { cancelled = true; };
-  }, [currentSrc, titleId, episodeId, applyResume]);
+  }, [currentSrc, isEmbed, titleId, episodeId, applyResume]);
 
   const saveProgress = useCallback(() => {
     const element = video.current;
@@ -264,15 +269,16 @@ export function VideoPlayer({ src, sources = [], titleId, titleSlug, title, post
 
   return <div className={"watch-player-shell" + (theater ? " is-theater" : "")}>
     <div ref={frame} className={`video-frame${controlsVisible ? "" : " controls-hidden"}${showCaptionSettings ? " captions-open" : ""}`} style={captionStyle} onMouseMove={revealControls} onMouseLeave={() => { if (!video.current?.paused && !reducedMotion) setControlsVisible(false); }}>
-      {activeSource?.kind === "embed" ? <iframe className="video-embed" src={currentSrc} title="Authorized video player" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="no-referrer" sandbox="allow-scripts allow-same-origin allow-presentation"/> : currentSrc ? <video ref={video} controls playsInline preload="metadata" onLoadedMetadata={() => { applyResume(); if (video.current) { video.current.volume = volume; video.current.playbackRate = playbackSpeed; } }} onPlay={recordView} onTimeUpdate={() => { const now = Date.now(); if (now - lastSave.current > 10000) { lastSave.current = now; saveProgress(); } }} onPause={saveProgress} onEnded={() => { saveProgress(); if (nextUrl) setNextCountdown(10); }} onRateChange={() => { if (video.current && video.current.playbackRate !== playbackSpeed) setPlaybackSpeed(video.current.playbackRate); }} onVolumeChange={() => { if (video.current && Math.abs(video.current.volume - volume) > 0.01) { setVolume(video.current.volume); savePreferences({ volume: video.current.volume }); } }} onError={() => setError("This source could not be played. Trying the next configured source…")}>{subtitles.map((track, index) => <track key={`${track.language}-${track.file_url}`} kind={track.kind === "captions" ? "captions" : "subtitles"} src={track.file_url} srcLang={track.language} label={track.label} default={index === selectedTrack}/>)}</video> : <div className="video-unavailable"><span className="unavailable-moon">☾</span><span className="eyebrow">A QUIET PLACEHOLDER</span><h2>This episode isn’t streaming yet.</h2><p>No authorized video source has been configured. An administrator can add a licensed source in the dashboard.</p><span className="demo-warning">No playback was started.</span></div>}
-      {currentSrc && <div className="player-overlay-controls" aria-label="Playback options">
+      {isEmbed ? <iframe key={currentSrc} className="video-embed" src={currentSrc} title="Authorized third-party video player" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" sandbox="allow-forms allow-scripts allow-same-origin allow-presentation allow-popups allow-popups-to-escape-sandbox"/> : currentSrc ? <video ref={video} controls playsInline preload="metadata" onLoadedMetadata={() => { applyResume(); if (video.current) { video.current.volume = volume; video.current.playbackRate = playbackSpeed; } }} onPlay={recordView} onTimeUpdate={() => { const now = Date.now(); if (now - lastSave.current > 10000) { lastSave.current = now; saveProgress(); } }} onPause={saveProgress} onEnded={() => { saveProgress(); if (nextUrl) setNextCountdown(10); }} onRateChange={() => { if (video.current && video.current.playbackRate !== playbackSpeed) setPlaybackSpeed(video.current.playbackRate); }} onVolumeChange={() => { if (video.current && Math.abs(video.current.volume - volume) > 0.01) { setVolume(video.current.volume); savePreferences({ volume: video.current.volume }); } }} onError={() => setError("This source could not be played. Trying the next configured source…")}>{subtitles.map((track, index) => <track key={`${track.language}-${track.file_url}`} kind={track.kind === "captions" ? "captions" : "subtitles"} src={track.file_url} srcLang={track.language} label={track.label} default={index === selectedTrack}/>)}</video> : <div className="video-unavailable"><span className="unavailable-moon">☾</span><span className="eyebrow">A QUIET PLACEHOLDER</span><h2>This episode isn’t streaming yet.</h2><p>No authorized video source has been configured. An administrator can add a licensed source in the dashboard.</p><span className="demo-warning">No playback was started.</span></div>}
+      {currentSrc && !isEmbed && <div className="player-overlay-controls" aria-label="Playback options">
         <label>Quality<select aria-label="Video quality" value={quality} onChange={(event) => { setQuality(event.target.value); setSourceIndex(0); setError(""); savePreferences({ quality: event.target.value }); }}><option value="auto">Auto</option>{["480p", "720p", "1080p"].map((value) => qualitySources.some((source) => source.quality === value) || availableSources.some((source) => source.quality === value) ? <option key={value} value={value}>{value}</option> : null)}</select></label>
         <label>Speed<select aria-label="Playback speed" value={playbackSpeed} onChange={(event) => { const nextSpeed=Number(event.target.value);setPlaybackSpeed(nextSpeed);if (video.current) video.current.playbackRate = nextSpeed; }}><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1">Normal</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
         {subtitles.length > 0 && <><label>Subtitles<select aria-label="Subtitle language" value={selectedTrack} onChange={(event) => changeTrack(Number(event.target.value))}><option value={-1}>Off</option>{subtitles.map((track, index) => <option key={`${track.language}-${index}`} value={index}>{track.label}</option>)}</select></label><button type="button" onClick={() => setShowCaptionSettings((value) => !value)} aria-expanded={showCaptionSettings}>CC settings</button></>}
         <button type="button" onClick={() => { const element = video.current as (HTMLVideoElement & { requestPictureInPicture?: () => Promise<PictureInPictureWindow> }) | null; if (element?.requestPictureInPicture) void element.requestPictureInPicture().catch(() => {}); }} disabled={!video.current || !("pictureInPictureEnabled" in document)} aria-label="Picture in picture">PiP</button>
         <button type="button" onClick={() => setTheater((value) => !value)} aria-pressed={theater}>{theater ? "Exit theater" : "Theater"}</button><button type="button" onClick={toggleFullscreen} aria-label="Toggle fullscreen">Fullscreen</button>
       </div>}
-      {showCaptionSettings && <div className="caption-settings" aria-label="Subtitle appearance"><label>Text size<input type="range" min="14" max="40" step="1" value={captionSize} onChange={(event) => setCaptionSize(Number(event.target.value))}/></label><label>Text color<input type="color" value={captionColor} onChange={(event) => setCaptionColor(event.target.value)}/></label><label>Background<input type="range" min="0" max="1" step="0.05" value={captionBackground} onChange={(event) => setCaptionBackground(Number(event.target.value))}/></label><label>Position<select value={captionPosition} onChange={(event) => setCaptionPosition(event.target.value)}><option value="bottom">Bottom</option><option value="middle">Middle</option><option value="top">Top</option></select></label><label>Timing offset ({captionTimingOffset > 0 ? "+" : ""}{captionTimingOffset.toFixed(1)} s)<input type="range" min="-10" max="10" step="0.5" value={captionTimingOffset} onChange={(event) => setCaptionTimingOffset(Number(event.target.value))}/></label></div>}
+      {currentSrc && isEmbed && <div className="player-overlay-controls" aria-label="Embedded player options"><button type="button" onClick={() => setTheater((value) => !value)} aria-pressed={theater}>{theater ? "Exit theater" : "Theater"}</button><button type="button" onClick={toggleFullscreen} aria-label="Toggle fullscreen">Fullscreen</button></div>}
+      {showCaptionSettings && !isEmbed && <div className="caption-settings" aria-label="Subtitle appearance"><label>Text size<input type="range" min="14" max="40" step="1" value={captionSize} onChange={(event) => setCaptionSize(Number(event.target.value))}/></label><label>Text color<input type="color" value={captionColor} onChange={(event) => setCaptionColor(event.target.value)}/></label><label>Background<input type="range" min="0" max="1" step="0.05" value={captionBackground} onChange={(event) => setCaptionBackground(Number(event.target.value))}/></label><label>Position<select value={captionPosition} onChange={(event) => setCaptionPosition(event.target.value)}><option value="bottom">Bottom</option><option value="middle">Middle</option><option value="top">Top</option></select></label><label>Timing offset ({captionTimingOffset > 0 ? "+" : ""}{captionTimingOffset.toFixed(1)} s)<input type="range" min="-10" max="10" step="0.5" value={captionTimingOffset} onChange={(event) => setCaptionTimingOffset(Number(event.target.value))}/></label></div>}
       {error && <p className="player-error" role="alert">{qualitySources.length > 1 ? error : "The stream could not be played. Check the configured source URL and try again."}</p>}
       {resumeNote && <p className="player-resume-note" role="status">{resumeNote}</p>}
       {nextCountdown !== null && <div className="next-episode-card" role="status"><span>Next episode starts in <strong>{nextCountdown}</strong></span><div><button type="button" className="button button-primary" onClick={playNext}>Play next</button><button type="button" className="button button-glass" onClick={() => setNextCountdown(null)}>Cancel</button></div></div>}

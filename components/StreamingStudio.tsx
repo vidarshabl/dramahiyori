@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { isLikelyEmbedInput, normalizeVideoSourceInput } from "@/lib/video-source-utils";
 
 type TitleOption = { id: string; title: string; type: string; episodes: Array<{ id: string; title: string; episode_number: number; season_number: number }> };
 type StudioData = { sources: any[]; downloads: any[]; reports: any[]; requests: any[]; popular: any[]; settings: Record<string, string> };
@@ -45,6 +46,14 @@ export function StreamingStudio() {
   }
 
   function selectTarget(value: string) { setTarget(value); setEpisodeId(""); }
+  function updateSourceUrl(value: string) {
+    setSourceUrl(value);
+    if (isLikelyEmbedInput(value)) setSourceKind("embed");
+    else if (/\.(?:m3u8|mp4|m4v|webm|ogv)(?:[?#]|$)/i.test(value)) {
+      const detected = normalizeVideoSourceInput(value);
+      if (detected && detected.kind !== "embed") setSourceKind(detected.kind);
+    }
+  }
   const selected = titles.find((title) => title.id === target);
   const episodeOptions = selected?.episodes || [];
 
@@ -66,7 +75,7 @@ export function StreamingStudio() {
         <label>Episode (optional)<select value={episodeId} onChange={(event) => setEpisodeId(event.target.value)} disabled={!target}><option value="">Title-level source</option>{episodeOptions.map((episode) => <option key={episode.id} value={episode.id}>S{episode.season_number} · E{episode.episode_number} · {episode.title}</option>)}</select></label>
         <label>Format<select value={sourceKind} onChange={(event) => setSourceKind(event.target.value)}><option value="mp4">MP4</option><option value="hls">HLS (.m3u8)</option><option value="embed">Embed</option></select></label>
         <label>Quality<select value={sourceQuality} onChange={(event) => setSourceQuality(event.target.value)}><option value="auto">Auto</option><option value="480p">480p</option><option value="720p">720p</option><option value="1080p">1080p</option></select></label>
-        <label className="wide">Authorized source URL<input required type="url" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} placeholder="https://…"/></label>
+        <label className="wide">Authorized source URL or iframe code<input required type="text" inputMode="url" autoCapitalize="none" autoCorrect="off" value={sourceUrl} onChange={(event) => updateSourceUrl(event.target.value)} placeholder={sourceKind === "embed" ? "https://host.example/e/… or paste the full <iframe> code" : "https://…/video.mp4 or https://…/playlist.m3u8"}/><small>Embed links from supported hosts and pasted iframe code are detected automatically. Only the iframe source URL is saved.</small></label>
         <div className="admin-actions wide"><button className="button button-primary" disabled={busy || !target}>{busy ? "Saving…" : "Add source"}</button></div>
       </form>
     </section>

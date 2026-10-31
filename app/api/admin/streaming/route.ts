@@ -2,21 +2,18 @@ import { randomUUID } from "node:crypto";
 import { currentAdmin } from "@/lib/auth";
 import { badRequest, json, readJson, sameOriginOrReject } from "@/lib/api";
 import { database } from "@/lib/db";
-import { isAllowedMediaUrl } from "@/lib/security";
+import { isValidMediaUrl } from "@/lib/security";
 import { invalidatePublicCatalogCache } from "@/lib/catalog";
+import { normalizeVideoSourceInput, type VideoSourceKind } from "@/lib/video-source-utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-type SourceKind = "hls" | "mp4" | "embed";
 type Quality = "auto" | "480p" | "720p" | "1080p";
 
-function absoluteMediaUrl(value: unknown) {
-  if (typeof value !== "string" || value.length > 2048 || !isAllowedMediaUrl(value)) return null;
-  try {
-    const url = new URL(value);
-    if (!["http:", "https:"].includes(url.protocol) || (process.env.NODE_ENV === "production" && url.protocol !== "https:")) return null;
-    return url.toString();
-  } catch { return null; }
+function absoluteMediaUrl(value: unknown, preferredKind?: VideoSourceKind) {
+  const source = normalizeVideoSourceInput(value, preferredKind);
+  if (!source || source.url.length > 2048 || !isValidMediaUrl(source.url)) return null;
+  return source;
 }
 
 async function setVideoSourceStatus(id: string, status: "active" | "inactive") {
@@ -81,11 +78,13 @@ export async function POST(request: Request) {
   if (action === "source") {
     const titleId = typeof body.titleId === "string" ? body.titleId : "";
     const episodeId = typeof body.episodeId === "string" && body.episodeId ? body.episodeId : null;
-    const kind = body.kind as SourceKind;
+    const requestedKind = body.kind as VideoSourceKind;
     const quality = body.quality as Quality;
-    const url = absoluteMediaUrl(body.url);
+    const source = absoluteMediaUrl(body.url, requestedKind);
+    const kind = source?.kind;
+    const url = source?.url;
     const priority = Number(body.priority ?? 0);
-    if (!titleId || !(await database.prepare("SELECT id FROM titles WHERE id=?").get(titleId)) || !("hls mp4 embed".split(" ") as string[]).includes(kind) || !("auto 480p 720p 1080p".split(" ") as string[]).includes(quality) || !url || !Number.isInteger(priority) || priority < -1000 || priority > 1000) return badRequest("Check the source type, quality, URL, and order.");
+    if (!titleId || !(await database.prepare("SELECT id FROM titles WHERE id=?").get(titleId)) || !kind || !("hls mp4 embed".split(" ") as string[]).includes(kind) || !("auto 480p 720p 1080p".split(" ") as string[]).includes(quality) || !url || !Number.isInteger(priority) || priority < -1000 || priority > 1000) return badRequest("Check the source type, quality, URL, and order.");
     if (episodeId && !await database.prepare("SELECT e.id FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE e.id=? AND s.title_id=?").get(episodeId, titleId)) return badRequest("Choose an episode that belongs to this title.");
     const id = randomUUID();
     await database.prepare("INSERT INTO video_sources(id,title_id,episode_id,kind,quality,url,priority,status) VALUES(?,?,?,?,?,?,?,'active')")
@@ -98,7 +97,8 @@ export async function POST(request: Request) {
     const titleId = typeof body.titleId === "string" ? body.titleId : "";
     const episodeId = typeof body.episodeId === "string" && body.episodeId ? body.episodeId : null;
     const quality = typeof body.quality === "string" ? body.quality : "";
-    const url = absoluteMediaUrl(body.url);
+    const source = absoluteMediaUrl(body.url);
+    const url = source?.url;
     const sizeMb = body.sizeMb === "" || body.sizeMb == null ? null : Number(body.sizeMb);
     const hostLabel = typeof body.hostLabel === "string" ? body.hostLabel.trim().slice(0, 80) : "";
     if (!titleId || !await database.prepare("SELECT id FROM titles WHERE id=?").get(titleId) || !("480p 720p 1080p subtitle".split(" ") as string[]).includes(quality) || !url || (sizeMb !== null && (!Number.isFinite(sizeMb) || sizeMb < 0 || sizeMb > 1_000_000))) return badRequest("Check the download quality, file size, and URL.");
