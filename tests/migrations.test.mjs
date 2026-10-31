@@ -152,6 +152,12 @@ test("an existing 001 database upgrades in place and serves cast, galleries, and
     assert.equal(person.gallery.length,1);
     assert.equal((await listCastMembers({query:"audit person",profession:"Actor"})).length,1);
     assert.deepEqual(await listCastProfessions(),["Actor"]);
+    await persistTitleEpisodes(database,"migration-title",[
+      {id:"audit-episode-3",seasonNumber:1,episodeNumber:1,title:"Second opener",videoUrl:""},
+      {id:"audit-episode-2",seasonNumber:2,episodeNumber:1,title:"First available episode",videoUrl:"https://media.example.test/episode.mp4",published:true},
+    ]);
+    assert.equal(await database.prepare("SELECT id FROM episodes WHERE id=?").get("audit-episode-1"),undefined,"episodes removed from the saved editor list are deleted from the database");
+    assert.equal(await database.prepare("SELECT id FROM video_sources WHERE id=?").get("legacy-episode-audit-episode-1"),undefined,"deleted episodes also remove their legacy playback source");
   `;
   try {
     const result=spawnSync(process.execPath,["--experimental-strip-types","--input-type=module","-e",childScript],{cwd:projectRoot,encoding:"utf8",env:{...process.env,NODE_ENV:"development",DATA_DIR:dataDir,DATABASE_URL:"",DATABASE_TOKEN:"",TURSO_DATABASE_URL:"",TURSO_AUTH_TOKEN:""}});

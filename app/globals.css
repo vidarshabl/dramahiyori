@@ -836,6 +836,8 @@ button{color:inherit}
 .admin-episode-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;color:#eedee8;font:500 12px var(--serif)}
 .admin-episode-heading>div{display:flex;gap:5px}
 .admin-episode-heading>div>button:not(.row-remove){width:32px;height:32px;border:1px solid var(--line);border-radius:6px;background:rgba(255,255,255,.03);color:#ded4dd;cursor:pointer}
+.admin-episode-heading>div>.episode-delete{min-height:32px;padding:0 10px;border:1px solid rgba(232,62,104,.38);border-radius:6px;background:rgba(232,62,104,.08);color:#f1a6b8;font:inherit;font-size:10px;cursor:pointer}
+.admin-episode-heading>div>.episode-delete:hover{border-color:rgba(232,62,104,.7);background:rgba(232,62,104,.16);color:#fff}
 .admin-episode-heading button:disabled{opacity:.35;cursor:not-allowed}
 .admin-episode-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
 .admin-episode-fields label{min-width:0;display:grid;gap:6px;color:#c7c2cc;font-size:9px}
