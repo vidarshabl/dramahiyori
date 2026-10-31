@@ -12,20 +12,27 @@ const slugify=(value:string)=>value.toLowerCase().normalize("NFKD").replace(/[\u
 export async function POST(request:Request) {
   const rejected=sameOriginOrReject(request);if(rejected)return rejected;
   const admin=await currentAdmin();if(!admin)return badRequest("Administrator access is required.",403);
-  let created=0,updated=0,castLinked=0;
+  const requestedSlug=new URL(request.url).searchParams.get("slug");
+  const dramas=requestedSlug?providedDramaCatalog.filter(drama=>drama.slug===requestedSlug):providedDramaCatalog;
+  if(requestedSlug&&!dramas.length)return badRequest("That supplied drama is not available to import.",404);
+  let created=0,updated=0,castLinked=0,skipped=0;
   try {
     await database.transaction(async tx=>{
-      for(const drama of providedDramaCatalog) {
+      for(const drama of dramas) {
         const previous=await tx.prepare("SELECT id FROM titles WHERE slug=?").get(drama.slug) as {id:string}|undefined;
+        // A one-title add should never overwrite edits on an existing record.
+        if(previous&&requestedSlug){skipped++;continue;}
         const titleId=previous?.id||randomUUID();
         if(previous) {
-          await tx.prepare(`UPDATE titles SET type='series',catalog_type='series',title=?,synopsis=?,release_year=?,country='South Korea',status='completed',runtime_minutes=?,imdb_rating=?,imdb_rating_is_estimate=?,total_episodes=?,total_runtime_minutes=?,poster_url=CASE WHEN ?<>'' THEN ? ELSE poster_url END,backdrop_url=CASE WHEN ?<>'' THEN ? ELSE backdrop_url END,published=1,demo=0,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-            .run(drama.title,drama.synopsis,drama.releaseYear,drama.runtimeMinutes,drama.imdbRating,drama.imdbRatingIsEstimate?1:0,drama.totalEpisodes,drama.totalRuntimeMinutes,drama.posterUrl,drama.posterUrl,drama.backdropUrl,drama.backdropUrl,titleId);
+          const alternativeTitle="alternativeTitle" in drama?drama.alternativeTitle:"";
+          await tx.prepare(`UPDATE titles SET type='series',catalog_type='series',title=?,alternative_title=CASE WHEN ?<>'' THEN ? ELSE alternative_title END,synopsis=?,release_year=?,country='South Korea',status='completed',runtime_minutes=?,imdb_rating=?,imdb_rating_is_estimate=?,total_episodes=?,total_runtime_minutes=?,poster_url=CASE WHEN ?<>'' THEN ? ELSE poster_url END,backdrop_url=CASE WHEN ?<>'' THEN ? ELSE backdrop_url END,published=1,demo=0,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+            .run(drama.title,alternativeTitle,alternativeTitle,drama.synopsis,drama.releaseYear,drama.runtimeMinutes,drama.imdbRating,drama.imdbRatingIsEstimate?1:0,drama.totalEpisodes,drama.totalRuntimeMinutes,drama.posterUrl,drama.posterUrl,drama.backdropUrl,drama.backdropUrl,titleId);
           updated++;
         } else {
-          await tx.prepare(`INSERT INTO titles(id,type,catalog_type,slug,title,synopsis,release_year,country,status,runtime_minutes,imdb_rating,imdb_rating_is_estimate,total_episodes,total_runtime_minutes,poster_url,backdrop_url,published,featured,demo)
-            VALUES(?,'series','series',?,?,?,?,'South Korea','completed',?,?,?,?,?,?,?,1,0,0)`)
-            .run(titleId,drama.slug,drama.title,drama.synopsis,drama.releaseYear,drama.runtimeMinutes,drama.imdbRating,drama.imdbRatingIsEstimate?1:0,drama.totalEpisodes,drama.totalRuntimeMinutes,drama.posterUrl,drama.backdropUrl);
+          const alternativeTitle="alternativeTitle" in drama?drama.alternativeTitle:"";
+          await tx.prepare(`INSERT INTO titles(id,type,catalog_type,slug,title,alternative_title,synopsis,release_year,country,status,runtime_minutes,imdb_rating,imdb_rating_is_estimate,total_episodes,total_runtime_minutes,poster_url,backdrop_url,published,featured,demo)
+            VALUES(?,'series','series',?,?,?,?,?,'South Korea','completed',?,?,?,?,?,?,?,1,0,0)`)
+            .run(titleId,drama.slug,drama.title,alternativeTitle,drama.synopsis,drama.releaseYear,drama.runtimeMinutes,drama.imdbRating,drama.imdbRatingIsEstimate?1:0,drama.totalEpisodes,drama.totalRuntimeMinutes,drama.posterUrl,drama.backdropUrl);
           created++;
         }
 
@@ -58,7 +65,7 @@ export async function POST(request:Request) {
       }
     });
     invalidatePublicCatalogCache();
-    return json({created,updated,castLinked,total:providedDramaCatalog.length,images:providedDramaCatalog.filter(item=>item.posterUrl||item.backdropUrl).length});
+    return json({created,updated,castLinked,skipped,total:dramas.length,images:dramas.filter(item=>item.posterUrl||item.backdropUrl).length});
   } catch(error) {
     console.error("Provided drama catalog import failed:",error instanceof Error?error.message:"unknown error");
     return badRequest("The drama list could not be imported. Check the database connection and try again.",500);

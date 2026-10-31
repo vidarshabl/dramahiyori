@@ -61,7 +61,7 @@ test("subtitle uploads enforce admin access, file validation, and storage readin
 test("administrator imports the supplied drama catalog idempotently with static artwork and metadata",async()=>{
  const imported=await request("/api/admin/catalog-import",{method:"POST",cookie:adminCookie});
  assert.equal(imported.response.status,200,JSON.stringify(imported.data));
- assert.equal(imported.data.created,10);assert.equal(imported.data.updated,0);assert.equal(imported.data.total,10);
+  assert.equal(imported.data.created,11);assert.equal(imported.data.updated,0);assert.equal(imported.data.total,11);
  const saved=await request("/api/admin/titles",{cookie:adminCookie});
  const queen=saved.data.items.find(item=>item.slug==="queen-of-tears");assert.ok(queen);
  assert.equal(queen.imdb_rating,8.2);assert.equal(queen.total_episodes,16);assert.equal(queen.total_runtime_minutes,1120);
@@ -70,8 +70,17 @@ test("administrator imports the supplied drama catalog idempotently with static 
  const titlePage=await fetch(base+"/title/queen-of-tears");assert.equal(titlePage.status,200);
  const titleHtml=await titlePage.text();assert.match(titleHtml,/8\.2\/10/);assert.match(titleHtml,/1,120 min total/);assert.match(titleHtml,/16 episodes/);assert.match(titleHtml,/Kim Soo-hyun/);assert.doesNotMatch(titleHtml,/"ratingCount":1/,"structured data must not invent an IMDb review count");
  const artwork=await fetch(base+"/drama-media/queen-of-tears-poster.jpg");assert.equal(artwork.status,200);assert.match(artwork.headers.get("content-type")||"",/image\/jpeg/);
+  const doctor=saved.data.items.find(item=>item.slug==="doctor-stranger");assert.ok(doctor);
+  assert.equal(doctor.alternative_title,"닥터 이방인");assert.equal(doctor.imdb_rating,7.5);assert.equal(doctor.total_episodes,20);assert.equal(doctor.total_runtime_minutes,1400);
+  assert.equal(doctor.poster_url,"/drama-media/doctor-stranger-poster.jpg");assert.equal(doctor.backdrop_url,"/drama-media/doctor-stranger-backdrop.jpg");
+  const people=await request("/api/admin/cast",{cookie:adminCookie});
+  const doctorCast=people.data.items.filter(person=>["Lee Jong-suk","Jin Se-yeon","Park Hae-jin","Kang So-ra"].includes(person.name)&&person.credits.some(credit=>credit.title_slug==="doctor-stranger"));
+  assert.deepEqual(doctorCast.map(person=>person.name).sort(),["Jin Se-yeon","Kang So-ra","Lee Jong-suk","Park Hae-jin"]);
+  for(const imagePath of [doctor.poster_url,doctor.backdrop_url]){const response=await fetch(base+imagePath);assert.equal(response.status,200);assert.match(response.headers.get("content-type")||"",/image\/jpeg/);}
+  const doctorOnly=await request("/api/admin/catalog-import?slug=doctor-stranger",{method:"POST",cookie:adminCookie});
+  assert.equal(doctorOnly.response.status,200);assert.equal(doctorOnly.data.created,0);assert.equal(doctorOnly.data.updated,0);assert.equal(doctorOnly.data.skipped,1,"targeted add leaves an existing title untouched");
  const rerun=await request("/api/admin/catalog-import",{method:"POST",cookie:adminCookie});assert.equal(rerun.response.status,200);
- assert.equal(rerun.data.created,0);assert.equal(rerun.data.updated,10);assert.equal(rerun.data.castLinked,0);
+  assert.equal(rerun.data.created,0);assert.equal(rerun.data.updated,11);assert.equal(rerun.data.castLinked,0);
  const once=await request("/api/admin/titles",{cookie:adminCookie});assert.equal(once.data.items.filter(item=>item.slug==="queen-of-tears").length,1);
 });
 

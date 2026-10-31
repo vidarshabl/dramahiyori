@@ -99,14 +99,21 @@ export function AdminDashboard({name}:{name:string}) {
     catch(reason){setError(reason instanceof Error?reason.message:"Please try again.");}
     finally{setBusy(false);}
   }
-  async function importProvidedCatalog() {
-    if(!confirm("Add the 10 dramas and link their supplied posters, backdrops, genres, ratings, and cast? Existing titles with matching slugs will be updated."))return;
+  async function importProvidedCatalog(slug?:string) {
+    const isSingleDrama=slug==="doctor-stranger";
+    const confirmation=isSingleDrama
+      ? "Add Doctor Stranger with its supplied poster, backdrop, cast, and details? If it already exists, it will be left unchanged."
+      : "Import the 11 supplied dramas with their posters, backdrops, genres, ratings, and cast? Existing titles with matching slugs will be updated.";
+    if(!confirm(confirmation))return;
     setImportingCatalog(true);setError("");setMessage("");
     try {
-      const response=await fetch("/api/admin/catalog-import",{method:"POST"});
+      const endpoint=slug?`/api/admin/catalog-import?slug=${encodeURIComponent(slug)}`:"/api/admin/catalog-import";
+      const response=await fetch(endpoint,{method:"POST"});
       if(response.status===403){router.replace("/admin/login");return;}
       const data=await response.json();if(!response.ok)throw new Error(data.error||"The supplied drama list could not be imported.");
-      setMessage(`${data.created} new dramas added, ${data.updated} existing dramas updated, and ${data.castLinked} cast links saved. Spring Fever has no matching image in the files supplied.`);
+      setMessage(isSingleDrama
+        ? data.created?"Doctor Stranger added with its poster, backdrop, cast, and details.":"Doctor Stranger already exists, so its current details were left unchanged."
+        : `${data.created} new dramas added, ${data.updated} existing dramas updated, and ${data.castLinked} cast links saved. Spring Fever has no matching image in the files supplied.`);
       await Promise.all([loadTitles(),loadOverview()]);
     } catch(reason){setError(reason instanceof Error?reason.message:"The drama list could not be imported.");}
     finally{setImportingCatalog(false);}
@@ -154,7 +161,7 @@ export function AdminDashboard({name}:{name:string}) {
 
       {tab==="titles"&&<>
         <div className="admin-page-intro"><h2>Content library</h2><p>Create and edit movies, series, genres, episodes, galleries, and authorized media URLs.</p></div>
-        <div className="admin-section"><div className="admin-section-title"><h3>{editing?(form.id?"Edit title":"New title"):"All titles"}</h3><div className="admin-actions">{!editing&&<button className="button button-glass" type="button" disabled={importingCatalog} onClick={()=>void importProvidedCatalog()}>{importingCatalog?"Adding dramas…":"Import supplied dramas"}</button>}<button className="button button-primary" type="button" onClick={()=>newTitle()}>＋ Add title</button>{editing&&<button className="button button-glass" type="button" onClick={()=>setEditing(false)}>Cancel edit</button>}</div></div>
+        <div className="admin-section"><div className="admin-section-title"><h3>{editing?(form.id?"Edit title":"New title"):"All titles"}</h3><div className="admin-actions">{!editing&&<><button className="button button-glass" type="button" disabled={importingCatalog} onClick={()=>void importProvidedCatalog("doctor-stranger")}>{importingCatalog?"Adding…":"＋ Add Doctor Stranger"}</button><button className="button button-glass" type="button" disabled={importingCatalog} onClick={()=>void importProvidedCatalog()}>{importingCatalog?"Adding dramas…":"Import supplied dramas"}</button></>}<button className="button button-primary" type="button" onClick={()=>newTitle()}>＋ Add title</button>{editing&&<button className="button button-glass" type="button" onClick={()=>setEditing(false)}>Cancel edit</button>}</div></div>
           {editing&&<form className="admin-editor" onSubmit={saveTitle}>
             <datalist id="admin-media-urls">{mediaUrls.map(url=><option key={url} value={url}/>)}</datalist>
             <label>Title<input required maxLength={160} value={form.title} onChange={event=>setForm({...form,title:event.target.value})}/></label><label>Type<select value={form.type} onChange={event=>setForm({...form,type:event.target.value})}><option value="series">Series</option><option value="movie">Movie</option><option value="variety">Variety show</option></select></label>
