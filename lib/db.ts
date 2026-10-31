@@ -323,7 +323,7 @@ export async function listWeeklySchedule():Promise<ScheduleEntry[]> {
 }
 
 export type GalleryImage = {id:string;image_url:string;caption:string;attribution:string;sort_order:number};
-export type VideoSource = {id:string;kind:"hls"|"mp4"|"embed";quality:"auto"|"480p"|"720p"|"1080p";url:string;priority:number};
+export type VideoSource = {id:string;kind:"hls"|"mp4"|"embed";quality:"auto"|"480p"|"720p"|"1080p";url:string;priority:number;updated_at:string};
 export type DownloadOption = {id:string;quality:string;size_mb:number|null;host_label:string};
 export type CastCredit = {id:string;cast_member_id:string;slug:string;name:string;portrait_url:string;character_name:string;role_type:"cast"|"director"|"writer"|"producer";sort_order:number};
 export type CastMember = {id:string;slug:string;name:string;biography:string;nationality:string;profession:string;portrait_url:string;created_at:string;updated_at:string;gallery?:GalleryImage[];credits?:Array<CastCredit & {title_id:string;title_slug:string;title:string;title_type:"movie"|"series"|"variety";release_year:number|null;poster_url:string}>};
@@ -397,7 +397,7 @@ export async function getTitle(slug:string) {
   const seasons = (await database.prepare(`SELECT s.id,s.season_number,s.name FROM seasons s WHERE s.title_id=? AND EXISTS
     (SELECT 1 FROM episodes e WHERE e.season_id=s.id AND e.published=1 AND (e.publish_at IS NULL OR datetime(e.publish_at)<=CURRENT_TIMESTAMP)) ORDER BY s.season_number`).all(row.id) as {id:string;season_number:number;name:string}[]).map((season)=>({...season}));
   const [titleSources,titleDownloads,titleSubtitles] = await Promise.all([
-    database.prepare("SELECT id,kind,quality,url,priority FROM video_sources WHERE title_id=? AND status='active' ORDER BY priority DESC,quality DESC,id").all(row.id) as Promise<VideoSource[]>,
+    database.prepare("SELECT id,kind,quality,url,priority,updated_at FROM video_sources WHERE title_id=? AND status='active' ORDER BY priority DESC,updated_at DESC,quality DESC,id").all(row.id) as Promise<VideoSource[]>,
     database.prepare("SELECT id,quality,size_mb,host_label FROM download_links WHERE title_id=? AND status='active' ORDER BY quality DESC,created_at").all(row.id) as Promise<DownloadOption[]>,
     database.prepare("SELECT language,label,vtt_url AS file_url,kind,is_default,timing_offset FROM content_subtitle_tracks WHERE title_id=? ORDER BY is_default DESC,language").all(row.id) as Promise<Record<string,unknown>[]>,
   ]);
@@ -406,7 +406,7 @@ export async function getTitle(slug:string) {
     return {...season,episodes:await Promise.all(episodes.map(async (episode) => {
       const [subtitles,sources,downloads] = await Promise.all([
         database.prepare("SELECT language,label,vtt_url AS file_url,kind,is_default,timing_offset FROM content_subtitle_tracks WHERE episode_id=? ORDER BY is_default DESC,language").all(episode.id),
-        database.prepare("SELECT id,kind,quality,url,priority FROM video_sources WHERE episode_id=? AND status='active' ORDER BY priority DESC,quality DESC,id").all(episode.id) as Promise<VideoSource[]>,
+        database.prepare("SELECT id,kind,quality,url,priority,updated_at FROM video_sources WHERE episode_id=? AND status='active' ORDER BY priority DESC,updated_at DESC,quality DESC,id").all(episode.id) as Promise<VideoSource[]>,
         database.prepare("SELECT id,quality,size_mb,host_label FROM download_links WHERE episode_id=? AND status='active' ORDER BY quality DESC,created_at").all(episode.id) as Promise<DownloadOption[]>,
       ]);
       // Keep the season number on each flattened episode as well as on the season.

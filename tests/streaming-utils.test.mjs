@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { convertSrtToVtt, validateVtt } from "../lib/subtitle-utils.ts";
 import { normalizeVideoSourceInput } from "../lib/video-source-utils.ts";
-import { getNextPlayableEpisode, getNextSourceIndex, isEpisodeNew, parseGuestProgress } from "../lib/watch-utils.ts";
+import { getNextPlayableEpisode, getNextSourceIndex, isEpisodeNew, parseGuestProgress, sortVideoSources } from "../lib/watch-utils.ts";
 
 test("Internet Archive item, embed, protocol-relative iframe, and direct MP4 URLs normalize for playback", () => {
   assert.deepEqual(normalizeVideoSourceInput("https://archive.org/details/sample-video"), {
@@ -72,6 +72,24 @@ test("source failover tries each source once and stops after the last failure", 
   assert.equal(getNextSourceIndex(2, 3), null);
   assert.equal(getNextSourceIndex(-1, 3), null);
   assert.equal(getNextSourceIndex(0, 0), null);
+});
+
+test("automatic playback respects source priority before quality", () => {
+  const ordered = sortVideoSources([
+    { url: "https://old-host.example/video.mp4", priority: 0, quality: "1080p" },
+    { url: "https://archive.org/embed/new-item", priority: 1, quality: "auto" },
+    { url: "https://backup-host.example/video.mp4", priority: 0, quality: "720p" },
+  ]);
+  assert.equal(ordered[0].url, "https://archive.org/embed/new-item");
+  assert.equal(ordered[1].url, "https://old-host.example/video.mp4");
+});
+
+test("when source priority ties, newest configured source comes before quality fallback", () => {
+  const ordered = sortVideoSources([
+    { url: "https://old-host.example/video.mp4", priority: 0, quality: "1080p", updated_at: "2026-10-01 10:00:00" },
+    { url: "https://archive.org/embed/new-item", priority: 0, quality: "auto", updated_at: "2026-10-31 10:00:00" },
+  ]);
+  assert.equal(ordered[0].url, "https://archive.org/embed/new-item");
 });
 
 test("episode NEW badge is limited to published times within the last 48 hours", () => {

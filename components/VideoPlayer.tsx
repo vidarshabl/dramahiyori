@@ -1,14 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getNextSourceIndex, parseGuestProgress } from "@/lib/watch-utils";
+import { getNextSourceIndex, parseGuestProgress, sortVideoSources } from "@/lib/watch-utils";
 import { normalizeVideoSourceInput } from "@/lib/video-source-utils";
 
 type SubtitleTrack = { language: string; label: string; file_url: string; kind: string; is_default?: number; timing_offset?: number };
-type MediaSource = { id?: string; kind: "hls" | "mp4" | "embed"; quality: "auto" | "480p" | "720p" | "1080p"; url: string; priority?: number };
+type MediaSource = { id?: string; kind: "hls" | "mp4" | "embed"; quality: "auto" | "480p" | "720p" | "1080p"; url: string; priority?: number; updated_at?: string };
 type Preference = { volume: number; quality: string; subtitleLanguage: string };
 const guestPreferencesKey = "kverse:playback-preferences:v1";
-const qualityRank: Record<string, number> = { "1080p": 4, "720p": 3, "480p": 2, auto: 1 };
 
 function readGuestPreferences(): Preference {
   try {
@@ -48,15 +47,14 @@ export function VideoPlayer({ src, sources = [], titleId, titleSlug, title, post
 
   const availableSources = useMemo(() => {
     const all = sources.length ? [...sources] : src ? [{ kind: "mp4" as const, quality: "auto" as const, url: src }] : [];
-    return all.flatMap((source) => {
+    return sortVideoSources(all.flatMap((source) => {
       const normalized = normalizeVideoSourceInput(source.url, source.kind);
       return normalized ? [{ ...source, ...normalized }] : [];
-    }).sort((a, b) => (Number(b.priority) || 0) - (Number(a.priority) || 0) || (qualityRank[b.quality] || 0) - (qualityRank[a.quality] || 0));
+    }));
   }, [sources, src]);
   const qualitySources = useMemo(() => {
-    if (quality === "auto") return [...availableSources].sort((a, b) => (qualityRank[b.quality] || 0) - (qualityRank[a.quality] || 0) || (Number(b.priority) || 0) - (Number(a.priority) || 0));
-    const exact = availableSources.filter((source) => source.quality === quality);
-    return exact.length ? exact : availableSources.filter((source) => source.quality === "auto");
+    if (quality === "auto") return sortVideoSources(availableSources);
+    return sortVideoSources(availableSources.filter((source) => source.quality === quality || source.quality === "auto"));
   }, [availableSources, quality]);
   const safeIndex = qualitySources.length ? Math.min(sourceIndex, qualitySources.length - 1) : 0;
   const activeSource = qualitySources[safeIndex];

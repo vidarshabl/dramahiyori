@@ -133,8 +133,14 @@ async function syncLegacyTitleSource(db:DatabaseAdapter,titleId:string,url:strin
   if(!url){await db.prepare("DELETE FROM video_sources WHERE id=?").run(id);return;}
   const source=normalizeVideoSourceInput(url);
   if(!source){await db.prepare("DELETE FROM video_sources WHERE id=?").run(id);return;}
+  const existing=await db.prepare("SELECT url,priority FROM video_sources WHERE id=?").get(id) as {url:string;priority:number}|undefined;
+  const priority=existing?.url===source.url
+    ? Number(existing.priority)
+    : Number((await db.prepare(`SELECT COALESCE(MAX(priority),-1001) AS priority FROM video_sources
+      WHERE status='active' AND (title_id=? OR episode_id IN
+        (SELECT e.id FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE s.title_id=?))`).get(titleId,titleId) as {priority:number}).priority)+1;
   await db.prepare(`INSERT INTO video_sources(id,title_id,kind,quality,url,priority,status)
-    VALUES(?,?,?,'auto',?,-1000,'active') ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,url=excluded.url,status='active',updated_at=CURRENT_TIMESTAMP`).run(id,titleId,source.kind,source.url);
+    VALUES(?,?,?,'auto',?,?, 'active') ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,url=excluded.url,priority=excluded.priority,status='active',updated_at=CURRENT_TIMESTAMP`).run(id,titleId,source.kind,source.url,priority);
 }
 async function writeTitleSubtitles(db:DatabaseAdapter,titleId:string,tracks:SubtitleInput[]|null) {
   if(tracks===null)return;

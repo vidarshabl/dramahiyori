@@ -12,6 +12,16 @@ export function getNextSourceIndex(currentIndex: number, sourceCount: number) {
   return currentIndex + 1 < sourceCount ? currentIndex + 1 : null;
 }
 
+/** Prefer the administrator's highest-priority source, then the best quality. */
+export function sortVideoSources<T extends { priority?: number; quality?: string; updated_at?: string }>(sources: T[]) {
+  const qualityRank: Record<string, number> = { "1080p": 4, "720p": 3, "480p": 2, auto: 1 };
+  return [...sources].sort((a, b) =>
+    (Number(b.priority) || 0) - (Number(a.priority) || 0)
+    || (Date.parse(b.updated_at || "") || 0) - (Date.parse(a.updated_at || "") || 0)
+    || (qualityRank[b.quality || "auto"] || 0) - (qualityRank[a.quality || "auto"] || 0),
+  );
+}
+
 export function isEpisodeNew(createdAt: string, now = Date.now()) {
   const rawDate = typeof createdAt === "string" ? createdAt.trim() : "";
   const normalizedDate = /^\d{4}-\d{2}-\d{2} \d/.test(rawDate) ? rawDate.replace(" ", "T") + "Z" : rawDate;

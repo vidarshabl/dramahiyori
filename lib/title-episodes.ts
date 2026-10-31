@@ -87,9 +87,15 @@ export async function persistTitleEpisodes(db: DatabaseAdapter, titleId: string,
 
     const legacySourceId = `legacy-episode-${episode.id}`;
     if (episode.videoUrl) {
+      const existingLegacySource = await db.prepare("SELECT url,priority FROM video_sources WHERE id=?").get(legacySourceId) as { url: string; priority: number } | undefined;
+      const priority = existingLegacySource?.url === episode.videoUrl
+        ? Number(existingLegacySource.priority)
+        : Number((await db.prepare(`SELECT COALESCE(MAX(priority),-1001) AS priority FROM video_sources
+          WHERE status='active' AND (title_id=? OR episode_id IN
+            (SELECT e.id FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE s.title_id=?))`).get(titleId, titleId) as { priority: number }).priority) + 1;
       await db.prepare(`INSERT INTO video_sources(id,episode_id,kind,quality,url,priority,status)
-        VALUES(?,?,?, ?,?,-1000,'active') ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,quality=excluded.quality,url=excluded.url,status='active',updated_at=CURRENT_TIMESTAMP`)
-        .run(legacySourceId, episode.id, episode.videoKind, episode.videoQuality, episode.videoUrl);
+        VALUES(?,?,?,?,?,?, 'active') ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,quality=excluded.quality,url=excluded.url,priority=excluded.priority,status='active',updated_at=CURRENT_TIMESTAMP`)
+        .run(legacySourceId, episode.id, episode.videoKind, episode.videoQuality, episode.videoUrl, priority);
     } else {
       await db.prepare("DELETE FROM video_sources WHERE id=?").run(legacySourceId);
     }

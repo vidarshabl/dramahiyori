@@ -83,9 +83,15 @@ export async function POST(request: Request) {
     const source = absoluteMediaUrl(body.url, requestedKind);
     const kind = source?.kind;
     const url = source?.url;
-    const priority = Number(body.priority ?? 0);
-    if (!titleId || !(await database.prepare("SELECT id FROM titles WHERE id=?").get(titleId)) || !kind || !("hls mp4 embed".split(" ") as string[]).includes(kind) || !("auto 480p 720p 1080p".split(" ") as string[]).includes(quality) || !url || !Number.isInteger(priority) || priority < -1000 || priority > 1000) return badRequest("Check the source type, quality, URL, and order.");
+    const requestedPriority = Number(body.priority ?? 0);
+    if (!titleId || !(await database.prepare("SELECT id FROM titles WHERE id=?").get(titleId)) || !kind || !("hls mp4 embed".split(" ") as string[]).includes(kind) || !("auto 480p 720p 1080p".split(" ") as string[]).includes(quality) || !url || !Number.isInteger(requestedPriority) || requestedPriority < -1000 || requestedPriority > 1000) return badRequest("Check the source type, quality, URL, and order.");
     if (episodeId && !await database.prepare("SELECT e.id FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE e.id=? AND s.title_id=?").get(episodeId, titleId)) return badRequest("Choose an episode that belongs to this title.");
+    const highestExisting = await database.prepare(`SELECT COALESCE(MAX(priority),-1001) AS priority FROM video_sources
+      WHERE status='active' AND (title_id=? OR episode_id IN
+        (SELECT e.id FROM episodes e JOIN seasons s ON s.id=e.season_id WHERE s.title_id=?))`).get(titleId, titleId) as { priority: number };
+    // A newly configured source should become the primary one. Keep older
+    // sources active so they remain available as fallback options.
+    const priority = Math.max(requestedPriority, Number(highestExisting?.priority ?? -1001) + 1);
     const id = randomUUID();
     await database.prepare("INSERT INTO video_sources(id,title_id,episode_id,kind,quality,url,priority,status) VALUES(?,?,?,?,?,?,?,'active')")
       .run(id, episodeId ? null : titleId, episodeId, kind, quality, url, priority);
